@@ -1,0 +1,50 @@
+Metadata-Version: 2.4
+Name: document-operator
+Version: 1.0.0
+Summary: Ordena tablas de documentos Word sin alterar su formato
+Author: Document Operator
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3 :: Only
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+
+# Document Operator
+
+Ordena las filas de una tabla Word sin reconstruir el documento ni perder su
+formato. Conserva fuentes, anchos de columnas, párrafos, imágenes, encabezados
+y pies porque mueve filas XML completas dentro de una copia del archivo.
+
+## Uso
+
+```powershell
+document-operator "PAABLO ANEXOS.docx"
+document-operator "PAABLO ANEXOS.docx" -o resultado.docx
+document-operator "PAABLO ANEXOS.docx" --orden nombre-apellidos
+```
+
+La regla predeterminada es `apellido-nombre-segundo-apellido`. La tabla se
+identifica por la cabecera `Nombre y Apellidos`; se puede cambiar con
+`--cabecera "Otro texto"`.
+
+## Desarrollo
+
+```powershell
+python -m pip install -e .
+python -m document_operator --help
+python -m document_operator "PAABLO ANEXOS.docx" --force
+```
+
+## Crear el ejecutable Windows
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python build_exe.py
+```
+
+El resultado se crea en `dist\document-operator.exe`. No requiere que la
+persona usuaria tenga Python instalado:
+
+```powershell
+.\document-operator.exe "PAABLO ANEXOS.docx"
+```

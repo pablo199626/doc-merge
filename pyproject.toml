@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "document-operator"
+version = "1.0.0"
+description = "Ordena tablas de documentos Word sin alterar su formato"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Document Operator"}]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+
+[project.scripts]
+document-operator = "document_operator.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["document_operator*"]

@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+document_operator/__init__.py
+document_operator/__main__.py
+document_operator/cli.py
+document_operator/docx_processor.py
+document_operator/sorting.py
+document_operator.egg-info/PKG-INFO
+document_operator.egg-info/SOURCES.txt
+document_operator.egg-info/dependency_links.txt
+document_operator.egg-info/entry_points.txt
+document_operator.egg-info/top_level.txt
+tests/test_document_operator.py
