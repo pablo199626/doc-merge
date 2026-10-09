@@ -1,39 +1,39 @@
-# Document Operator
+# DocMerge
 
-Ordena las filas de una tabla Word sin reconstruir el documento ni perder su
-formato. Conserva fuentes, anchos de columnas, párrafos, imágenes, encabezados
-y pies porque mueve filas XML completas dentro de una copia del archivo.
+DocMerge 2.1.0 ordena y transfiere filas completas de tablas DOCX
+usando un listado PDF como referencia. La implementación principal usa C# sobre
+.NET 10; la referencia Python permanece archivada en `legacy/python/`.
 
-## Uso
-
-```powershell
-document-operator "PAABLO ANEXOS.docx"
-document-operator "PAABLO ANEXOS.docx" -o resultado.docx
-document-operator "PAABLO ANEXOS.docx" --orden nombre-apellidos
-```
-
-La regla predeterminada es `apellido-nombre-segundo-apellido`. La tabla se
-identifica por la cabecera `Nombre y Apellidos`; se puede cambiar con
-`--cabecera "Otro texto"`.
+El comando se identifica como `docmerge` y la entrega para Windows se publica
+como `DocMerge.exe`.
 
 ## Desarrollo
 
 ```powershell
-python -m pip install -e .
-python -m document_operator --help
-python -m document_operator "PAABLO ANEXOS.docx" --force
+dotnet build DocMerge.sln -warnaserror
+dotnet test DocMerge.sln
 ```
 
-## Crear el ejecutable Windows
+Si el `dotnet` x86 instalado en el equipo aparece antes en `PATH`, usa
+`C:\Program Files\dotnet\dotnet.exe`.
+
+## Ejecución
 
 ```powershell
-python -m pip install -r requirements-dev.txt
-python build_exe.py
+dotnet run --project src/DocMerge.Console -- "assets/documents/PAABLO ANEXOS.docx" --force
 ```
 
-El resultado se crea en `dist\document-operator.exe`. No requiere que la
-persona usuaria tenga Python instalado:
+## Estructura
+
+- `src/`: código fuente C#.
+- `tests/`: pruebas automatizadas C#.
+- `assets/`: documentos locales privados y resultados generados.
+- `legacy/python/`: referencia histórica inmutable de Python.
+- `release/`: entrega certificada para Windows x64.
+- `docs/`: documentación técnica del proyecto.
+
+## Publicación Windows x64
 
 ```powershell
-.\document-operator.exe "PAABLO ANEXOS.docx"
+dotnet publish src/DocMerge.Console -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```

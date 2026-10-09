@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Unicode\CaseFolding-15.0.txt" />
+    <EmbeddedResource Include="Unicode\Whitespace-15.0.txt" />
+  </ItemGroup>
+
+</Project>
