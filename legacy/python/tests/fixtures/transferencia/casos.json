@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "descripcion": "Casos independientes y completamente ficticios. Resultado sin ordenar; las referencias preservan contenido y formato del registro indicado.",
+  "casos": [
+    {
+      "id": "reemplazar",
+      "pdf": ["Prueba Norte ANA"],
+      "origen": [{"id": "o1", "nombre": "Prueba Norte ANA", "medidas": ["ORIGEN-A", "ORIGEN-B"]}],
+      "destino": [{"id": "d1", "nombre": "Prueba Norte ANA", "medidas": ["DESTINO-ANTIGUO"]}],
+      "acciones": [{"tipo": "reemplazar", "origen": "o1", "destino": "d1"}],
+      "resultado": ["o1"]
+    },
+    {
+      "id": "anadir_y_eliminar",
+      "pdf": ["Prueba Norte ANA"],
+      "origen": [{"id": "o1", "nombre": "Prueba Norte ANA", "medidas": ["SOLO-ANA"]}],
+      "destino": [{"id": "d1", "nombre": "Ensayo Sur LUIS", "medidas": ["SOLO-LUIS"]}],
+      "acciones": [{"tipo": "anadir", "origen": "o1"}, {"tipo": "eliminar", "destino": "d1"}],
+      "resultado": ["o1"]
+    },
+    {
+      "id": "origen_ausente_conservar",
+      "pdf": ["Prueba Norte ANA"],
+      "origen": [],
+      "destino": [{"id": "d1", "nombre": "Prueba Norte ANA", "medidas": ["CONSERVAR-A"]}],
+      "acciones": [{"tipo": "conservar", "destino": "d1", "motivo": "origen_ausente"}],
+      "resultado": ["d1"]
+    },
+    {
+      "id": "ausente_en_ambos",
+      "pdf": ["Prueba Norte ANA"],
+      "origen": [],
+      "destino": [],
+      "acciones": [{"tipo": "omitir", "motivo": "origen_ausente"}],
+      "resultado": []
+    },
+    {
+      "id": "origen_ambiguo_conservar",
+      "pdf": ["Prueba Norte ANA"],
+      "origen": [{"id": "o1", "nombre": "Prueba Norte ANA", "medidas": ["A"]}, {"id": "o2", "nombre": "Prueba Norte ANA", "medidas": ["B"]}],
+      "destino": [{"id": "d1", "nombre": "Prueba Norte ANA", "medidas": ["CONSERVAR"]}],
+      "acciones": [{"tipo": "conservar", "destino": "d1", "motivo": "origen_ambiguo"}],
+      "resultado": ["d1"]
+    },
+    {
+      "id": "origen_ambiguo_sin_destino",
+      "pdf": ["Prueba Norte ANA"],
+      "origen": [{"id": "o1", "nombre": "Prueba Norte ANA", "medidas": ["A"]}, {"id": "o2", "nombre": "Prueba Norte ANA", "medidas": ["B"]}],
+      "destino": [],
+      "acciones": [{"tipo": "omitir", "motivo": "origen_ambiguo"}],
+      "resultado": []
+    },
+    {
+      "id": "destino_ambiguo_continuar",
+      "pdf": ["Prueba Norte ANA", "Ensayo Sur LUIS"],
+      "origen": [{"id": "o1", "nombre": "Prueba Norte ANA", "medidas": ["NO-COPIAR"]}, {"id": "o2", "nombre": "Ensayo Sur LUIS", "medidas": ["SI-COPIAR"]}],
+      "destino": [{"id": "d1", "nombre": "Prueba Norte ANA", "medidas": ["CONSERVAR-1"]}, {"id": "d2", "nombre": "Prueba Norte ANA", "medidas": ["CONSERVAR-2"]}],
+      "acciones": [{"tipo": "conservar", "destino": "d1", "motivo": "destino_ambiguo"}, {"tipo": "conservar", "destino": "d2", "motivo": "destino_ambiguo"}, {"tipo": "anadir", "origen": "o2"}],
+      "resultado": ["d1", "d2", "o2"]
+    },
+    {
+      "id": "destino_ambiguo_ausente_pdf",
+      "pdf": ["Ensayo Sur LUIS"],
+      "origen": [{"id": "o1", "nombre": "Ensayo Sur LUIS", "medidas": ["LUIS"]}],
+      "destino": [{"id": "d1", "nombre": "Prueba Norte ANA", "medidas": ["A"]}, {"id": "d2", "nombre": "Prueba Norte ANA", "medidas": ["B"]}],
+      "acciones": [{"tipo": "conservar", "destino": "d1", "motivo": "destino_ambiguo"}, {"tipo": "conservar", "destino": "d2", "motivo": "destino_ambiguo"}, {"tipo": "anadir", "origen": "o1"}],
+      "resultado": ["d1", "d2", "o1"]
+    },
+    {
+      "id": "normalizacion_y_duplicado_pdf",
+      "pdf": ["  FICCIÓN  PEÑA MARÍA ELENA ", "Ficcio\u0301n Pen\u0303a Mari\u0301a Elena"],
+      "origen": [{"id": "o1", "nombre": "Ficción Peña MARÍA ELENA", "medidas": ["UNICODE"]}],
+      "destino": [],
+      "acciones": [{"tipo": "anadir", "origen": "o1"}],
+      "resultado": ["o1"]
+    },
+    {
+      "id": "no_confundir_tildes",
+      "pdf": ["Ficción Peña MARÍA"],
+      "origen": [{"id": "o1", "nombre": "Ficción Pena MARÍA", "medidas": ["OTRA-PERSONA"]}],
+      "destino": [{"id": "d1", "nombre": "Ficción Peña MARÍA", "medidas": ["CONSERVAR"]}],
+      "acciones": [{"tipo": "conservar", "destino": "d1", "motivo": "origen_ausente"}],
+      "resultado": ["d1"]
+    },
+    {
+      "id": "medidas_vacias_reemplazan",
+      "pdf": ["Prueba Norte ANA"],
+      "origen": [{"id": "o1", "nombre": "Prueba Norte ANA", "medidas": []}],
+      "destino": [{"id": "d1", "nombre": "Prueba Norte ANA", "medidas": ["ANTIGUO"]}],
+      "acciones": [{"tipo": "reemplazar", "origen": "o1", "destino": "d1"}],
+      "resultado": ["o1"]
+    }
+  ]
+}

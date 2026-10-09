@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.spec
+!legacy/python/document-operator.spec
+*.docx.lock
+bin/
+obj/
+publish/
+.vs/
+.idea/
+*.user
+TestResults/
+
+# Private local documents and generated results
+/assets/documents/
+/assets/outputs/

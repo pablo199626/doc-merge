@@ -1,0 +1,51 @@
+DOCMERGE 2.1.0
+==============
+
+Uso desde PowerShell o Símbolo del sistema:
+
+  DocMerge.exe "C:\ruta\al\documento.docx"
+
+El archivo de salida se crea junto al original con el sufijo _ordenado.
+El documento original no se modifica.
+
+Elegir una salida concreta:
+
+  DocMerge.exe "entrada.docx" -o "salida.docx"
+
+Sobrescribir una salida existente:
+
+  DocMerge.exe "entrada.docx" --force
+
+Ayuda y versión:
+
+  DocMerge.exe --help
+  DocMerge.exe --version
+
+La tabla que se ordena se identifica por la cabecera "Nombre y Apellidos".
+
+USO HACIENDO DOBLE CLIC
+=======================
+
+Haz doble clic en DocMerge.exe. Se abrirá un asistente donde podrás:
+
+  1. Transferir personas usando un listado PDF.
+  2. Ordenar alfabéticamente un documento Word.
+
+Puedes escribir las rutas o arrastrar cada archivo a la ventana. La ventana
+permanecerá abierta al finalizar para que puedas revisar el resultado.
+
+TRANSFERIR PERSONAS DESDE UN LISTADO PDF
+========================================
+
+  DocMerge.exe "ORIGEN.docx" --destino "DESTINO.docx" --lista "LISTA.pdf"
+
+La salida predeterminada se llama DESTINO_generado.docx. El archivo destino
+aporta la estructura general y las filas seleccionadas conservan el contenido
+y formato del origen. Los tres archivos de entrada permanecen intactos.
+
+Revisar las acciones sin crear un documento:
+
+  DocMerge.exe "ORIGEN.docx" --destino "DESTINO.docx" --lista "LISTA.pdf" --simular
+
+Al terminar se muestra un resumen y cualquier caso que requiera revisión
+manual por ausencia o ambigüedad de nombres.
