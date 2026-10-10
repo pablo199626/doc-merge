@@ -7,7 +7,7 @@
 - Más adelante se añadirá una interfaz gráfica de escritorio para Windows (WPF con MVVM). Por eso el núcleo debe ser independiente de cualquier interfaz: ninguna clase de dominio, aplicación o infraestructura puede usar `Console.*`, `MessageBox` ni tipos de UI.
 - `Console.*` solo se permite en el proyecto `DocMerge.Console`. La futura UI WPF consumirá exactamente los mismos casos de uso.
 - Prioridad de mantenimiento: conserva los contratos observables y separa las correcciones funcionales de los refactors. No reintroduzcas diferencias frente al comportamiento ya certificado sin una decisión explícita y pruebas de regresión.
-- La referencia Python se conserva sin modificar en `legacy/python/`. `legacy/python/reference.sha256` valida sus 27 archivos. Ejecútala desde una copia temporal cuando necesite el documento real local del que depende una prueba. No copies documentos reales dentro de `legacy/` ni los incluyas en Git o en distribuciones.
+- La referencia Python se conserva sin modificar en `legacy/python/`. `legacy/python/reference.sha256` es el manifiesto histórico de sus 27 archivos. Ejecútala desde una copia temporal cuando necesite el documento real local del que depende una prueba. No copies documentos reales dentro de `legacy/` ni los incluyas en Git o en distribuciones. No regeneres el manifiesto ni normalices el contenido archivado sin una investigación y autorización expresas.
 - Los módulos `identity`, `sorting`, `pdf_reader`, `docx_processor`, `matching`, `validation`, `transfer` y `cli` ya están portados. Todo cambio posterior debe mantener las pruebas de paridad aplicables y pasar la verificación completa.
 - Si el comportamiento histórico es ambiguo, parece un error o entra en conflicto con el contrato C# ya certificado, pregunta antes de decidir; no lo corrijas en silencio ni lo reinterpretes.
 
@@ -20,6 +20,15 @@
 - En el DOCX local, la ordenación C# coincidió con Python para 10 identidades y cambió exclusivamente `word/document.xml`. La transferencia real produjo las mismas 7 identidades, orden y contenido textual que Python.
 - El ejecutable `DocMerge.exe` fue republicado y probado de forma independiente el 9 de octubre de 2026 en `--version`, ordenación, transferencia y asistente sin argumentos. La entrega tiene versión de archivo `2.1.0.0`, versión de producto `2.1.0`, tamaño de 79.658.800 bytes y SHA-256 `c374e28de1d615012ae0db2ba395442537043c2f28bc5ad4a045a7f2481127ff`.
 - Los hashes privados de control siguen documentados en `docs/migration-reference.md`; compruébalos antes y después de cualquier prueba con documentos locales.
+
+### Revalidación de mantenibilidad del 10 de octubre de 2026
+
+- El código fuente C# quedó revalidado con .NET SDK `10.0.401`: `dotnet format --verify-no-changes`, `dotnet build --warnaserror`, `dotnet test --no-build` y `git diff --check` finalizaron correctamente. La suite actual tiene **61 pruebas**: Domain 22, Application 8, Infrastructure 23 y Console 8.
+- La suite Python archivada volvió a superar sus 30 pruebas desde una copia temporal. El checkout limpio actual no reproduce byte a byte todos los valores de `legacy/python/reference.sha256`: 21 archivos difieren con los finales de línea del árbol de trabajo y 8 siguen difiriendo tras normalizarlos a LF. Esta anomalía pertenece al estado histórico rastreado, no a la revalidación C#. No edites `legacy/python/` ni `reference.sha256` para ocultarla; debe investigarse por separado si se necesita certificar de nuevo el manifiesto.
+- La prueba diferencial privada volvió a confirmar 10 filas ordenadas y una transferencia de 7 altas, 10 bajas, 7 personas finales y ninguna incidencia. La ordenación C# y Python produjo el mismo `word/document.xml` canónico y no cambió ninguna otra parte. La transferencia produjo documentos y relaciones canónicamente iguales y el mismo conjunto de 65 estilos; solo varió el orden de tres definiciones de estilo independientes. Los tres hashes privados permanecieron intactos.
+- El endurecimiento de mantenibilidad segregó `IDocumentSorter` e `ITransferPlanEditor`, añadió validación de peticiones en Application, comprobación de hashes antes de generar y antes de publicar, progreso estructurado, cancelación cooperativa y validación semántica de dependencias DOCX. Conserva estas garantías y sus pruebas.
+- `Directory.Build.props` genera documentación XML y usa el nivel recomendado de analizadores; `.editorconfig` trata como advertencia los parámetros, campos y miembros privados sin uso. Domain y Application mantienen documentada su API pública reutilizable por la futura interfaz.
+- La entrega de `release/` sigue siendo el ejecutable certificado del 9 de octubre. No asumas que contiene los cambios de mantenibilidad del árbol de trabajo hasta que se solicite y complete una nueva publicación y certificación.
 
 ## Estructura de la solución
 
@@ -53,6 +62,8 @@ Equivalencia entre módulos Python y su destino en C#:
 
 Las dependencias apuntan hacia el dominio: `Console` → `Application` → `Domain`, e `Infrastructure` → `Application`/`Domain` (implementa sus interfaces). El dominio no referencia ningún otro proyecto ni librerías externas.
 
+Los contratos DOCX de Application están segregados: `IDocumentReader` lee snapshots, `IDocumentSorter` ordena documentos e `ITransferPlanEditor` aplica planes de transferencia. No vuelvas a unir ordenación y transferencia en una interfaz o implementación monolítica.
+
 ## Datos del proyecto
 
 - El nombre público del producto es `DocMerge`, el comando mostrado por el CLI es `docmerge` y el ensamblado debe producir `DocMerge.exe`; los espacios de nombres usan `DocMerge`.
@@ -62,6 +73,7 @@ Las dependencias apuntan hacia el dominio: `Console` → `Application` → `Doma
 - El procesador identifica de forma única la tabla por la cabecera exacta `Nombre y Apellidos` (ajustable con `--cabecera`) y deriva de ella la columna de identidad. Mueve o importa nodos XML `<w:tr>` completos: nunca reconstruir un documento ni una tabla, ni leer el contenido a través de texto plano, porque se perderían formato y contenido no tabular.
 - La ordenación simple aplica la corrección funcional aprobada tras certificar la paridad: también exige una única cabecera exacta normalizada y usa la columna derivada de esa cabecera. No restaures el comportamiento accidental de Python que aceptaba coincidencias parciales y asumía siempre la segunda columna.
 - La ordenación simple solo puede cambiar `word/document.xml`. La transferencia parte de una copia del destino y puede cambiar además estilos, numeración, relaciones, tipos de contenido y recursos estrictamente necesarios para conservar el formato del origen; debe validar el resultado temporal antes de publicarlo.
+- La validación de transferencia compara el contenido y orden esperados, conserva el contenido exterior a la tabla, comprueba partes del destino, referencias declaradas, dependencias semánticas de estilos y numeraciones, relaciones, recursos y alcanzabilidad de las partes añadidas. No reduzcas esta validación a comparar identificadores o a comprobar que el ZIP abre.
 - La identidad, la interpretación del formato del nombre y la construcción de la clave de ordenación son responsabilidades separadas. Los perfiles iniciales conservan exactamente las heurísticas Python, pero añadir un formato futuro solo debe requerir una estrategia de interpretación, un perfil declarativo y sus pruebas; nunca cambios en el procesador XML.
 - La identidad usa coincidencia exacta normalizada: Unicode FormC, colapso de espacios según Python/Unicode 15.0 y full case folding Unicode 15.0 mediante tablas embebidas en `src/DocMerge.Domain/Unicode/`. No sustituirlo por `ToLowerInvariant`, comparadores culturales ni eliminación de tildes o `ñ`. Conserva las pruebas de `ß`, `ẞ`, sigma, `İ`, ligaduras, tildes y espacios Unicode. Las ambigüedades no deben asociar datos dudosos: se conserva el destino cuando exista, se omite la transferencia insegura y se informa al finalizar.
 - El lector PDF exige texto extraíble y valida la sección numerada `Alumnado (n)`; un PDF escaneado, cifrado sin acceso, vacío o parcialmente extraído es un error, nunca una autorización para eliminar filas. La implementación adoptada usa `PdfPig` `0.1.16`, fijado en el proyecto Infrastructure, tras la prueba diferencial contra `pypdf` 6.19.0. No cambies la biblioteca o su versión sin repetir la prueba diferencial sobre el corpus aprobado.
@@ -131,13 +143,15 @@ Las dependencias apuntan hacia el dominio: `Console` → `Application` → `Doma
 
 - Usa nombres descriptivos y pronunciables, sin abreviaturas crípticas.
 - Nombra métodos con verbos y clases y variables con sustantivos; aplica las reglas de inglés de la sección de naming.
-- El código debe explicarse por sí mismo. Los comentarios explican el porqué, las restricciones o las decisiones, no repiten lo que hace el código. Usa comentarios XML (`///`) en la API pública cuando aporten información que el nombre no da.
+- El código debe explicarse por sí mismo. Los comentarios explican el porqué, las restricciones o las decisiones, no repiten lo que hace el código. Mantén comentarios XML (`///`) en toda la API pública de Domain y Application; la compilación genera su documentación y trata su ausencia como error. En API interna, documenta solo aquello que el nombre y los tipos no expresen.
 - No dejes código muerto ni código comentado. Todo `TODO` debe incluir contexto y una condición de resolución o referencia a una tarea.
+- No conserves parámetros, campos, propiedades ni métodos privados sin uso. `IDE0060`, `IDE0051` e `IDE0052` están configurados para hacer fallar la compilación; no los suprimas localmente sin justificar una necesidad real.
 - Respeta las convenciones y el estilo definidos en `.editorconfig`.
 
 ## Errores y robustez
 
 - Maneja los errores explícitamente; nunca silencies excepciones con un `catch` vacío. Si un error es recuperable, documenta el motivo y ejecuta una recuperación concreta.
+- Evita `catch (Exception)` sin filtro. Cuando una biblioteca no ofrezca una excepción base adecuada, usa un filtro que enumere exclusivamente los fallos esperados y deja pasar cancelaciones, errores de programación y fallos inesperados.
 - Falla rápido: lanza o retorna el error en cuanto lo detectes.
 - Usa excepciones específicas (derivadas de una excepción base del proyecto) con mensajes útiles y conserva la causa al traducir excepciones entre capas pasándola como `innerException`. No uses `throw ex;`; usa `throw;` para relanzar. Evita devolver `null` para indicar un fallo; resérvalo para ausencias válidas y documentadas.
 - No registres ni expongas contraseñas, tokens u otros datos sensibles. Los diagnósticos deben incluir solo la información necesaria; las pruebas y ejemplos compartidos usan datos ficticios.
@@ -159,7 +173,7 @@ Las dependencias apuntan hacia el dominio: `Console` → `Application` → `Doma
 
 - Antes de crear algo nuevo, busca si ya existe en el proyecto.
 - Haz cambios pequeños y enfocados; no refactorices lo que no se pidió.
-- Ejecuta formato, tests y build aplicables antes de dar una tarea por terminada: `dotnet format --verify-no-changes`, `dotnet build -warnaserror` y `dotnet test`. Comunica cualquier comprobación que no se haya podido ejecutar.
+- Ejecuta secuencialmente formato, build y tests antes de dar una tarea por terminada: `dotnet format --verify-no-changes`, `dotnet build --warnaserror` y `dotnet test --no-build`. Ejecuta también `git diff --check`. Comunica cualquier comprobación que no se haya podido ejecutar.
 - Para entregar un ejecutable, ejecuta también `dotnet publish` como se indica arriba, verifica su versión y prueba el flujo afectado (incluido el asistente de doble clic) antes de distribuirlo.
 - Para cambios exclusivamente documentales, revisa el contenido y ejecuta `git diff --check`; no es necesario recompilar el ejecutable.
 - Si falta una configuración de formato o analizadores, indícalo en la verificación cuando sea relevante; no introduzcas nuevas herramientas o paquetes NuGet como efecto secundario de otra tarea. Toda dependencia nueva se propone antes al usuario.
