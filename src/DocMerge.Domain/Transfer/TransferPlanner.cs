@@ -3,22 +3,31 @@ using DocMerge.Domain.Pdf;
 
 namespace DocMerge.Domain.Transfer;
 
+/// <summary>Builds a deterministic transfer plan from validated input snapshots.</summary>
 public sealed class TransferPlanner
 {
+    /// <summary>Creates the actions and issues required to reconcile the destination with the PDF list.</summary>
+    /// <param name="pdf">The validated PDF list.</param>
+    /// <param name="source">The source document snapshot.</param>
+    /// <param name="destination">The destination document snapshot.</param>
+    /// <returns>An immutable transfer plan.</returns>
     public TransferPlan Create(
         PdfReadResult pdf,
         DocumentSnapshot source,
         DocumentSnapshot destination)
     {
-        var pdfGroups = GroupPdfEntries(pdf.Entries);
-        var sourceGroups = GroupRecords(source.Records);
-        var destinationGroups = GroupRecords(destination.Records);
-        var issues = CreateDuplicatePdfIssues(pdfGroups);
-        var ambiguousKeys = FindAmbiguousDestinationKeys(destination);
-        var actions = PreserveAmbiguousDestinations(
-            destination, destinationGroups, pdfGroups, ambiguousKeys, issues);
-        ResolveListedPeople(pdfGroups, sourceGroups, destinationGroups, ambiguousKeys, actions, issues);
-        AddDeletions(destination, pdfGroups, ambiguousKeys, actions);
+        ArgumentNullException.ThrowIfNull(pdf);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(destination);
+        var groups = new PlanningGroups(
+            GroupPdfEntries(pdf.Entries),
+            GroupRecords(source.Records),
+            GroupRecords(destination.Records),
+            FindAmbiguousDestinationKeys(destination));
+        var issues = CreateDuplicatePdfIssues(groups.Pdf);
+        var actions = PreserveAmbiguousDestinations(destination, groups, issues);
+        ResolveListedPeople(groups, actions, issues);
+        AddDeletions(destination, groups, actions);
         return new TransferPlan(
             actions, issues, source.Sha256, destination.Sha256, pdf.Sha256, pdf.DeclaredTotal);
     }
@@ -72,23 +81,21 @@ public sealed class TransferPlanner
 
     private static List<TransferAction> PreserveAmbiguousDestinations(
         DocumentSnapshot destination,
-        IReadOnlyDictionary<string, List<DocumentRecord>> destinationGroups,
-        IReadOnlyDictionary<string, List<PdfEntry>> pdfGroups,
-        IReadOnlySet<string> ambiguousKeys,
+        PlanningGroups groups,
         ICollection<TransferIssue> issues)
     {
-        var actions = destination.Records.Where(record => ambiguousKeys.Contains(record.IdentityKey))
-            .Select(record => new TransferAction(
-                ActionType.Keep,
+        var actions = destination.Records.Where(
+            record => groups.AmbiguousDestinationKeys.Contains(record.IdentityKey))
+            .Select(record => TransferAction.Keep(
                 record.IdentityKey,
                 record.OriginalName,
-                pdfGroups.GetValueOrDefault(record.IdentityKey) ?? [],
-                Destination: record,
-                Reason: IssueType.AmbiguousDestination))
+                groups.Pdf.GetValueOrDefault(record.IdentityKey) ?? [],
+                record,
+                IssueType.AmbiguousDestination))
             .ToList();
-        foreach (var key in OrderedAmbiguousKeys(destination, ambiguousKeys))
+        foreach (var key in OrderedAmbiguousKeys(destination, groups.AmbiguousDestinationKeys))
         {
-            issues.Add(CreateDestinationIssue(key, destinationGroups[key]));
+            issues.Add(CreateDestinationIssue(key, groups.Destination[key]));
         }
 
         return actions;
@@ -116,33 +123,29 @@ public sealed class TransferPlanner
     }
 
     private static void ResolveListedPeople(
-        IReadOnlyDictionary<string, List<PdfEntry>> pdfGroups,
-        IReadOnlyDictionary<string, List<DocumentRecord>> sourceGroups,
-        IReadOnlyDictionary<string, List<DocumentRecord>> destinationGroups,
-        IReadOnlySet<string> ambiguousKeys,
+        PlanningGroups groups,
         ICollection<TransferAction> actions,
         ICollection<TransferIssue> issues)
     {
-        foreach (var pair in pdfGroups)
+        foreach (var pair in groups.Pdf)
         {
-            if (ambiguousKeys.Contains(pair.Key))
+            if (groups.AmbiguousDestinationKeys.Contains(pair.Key))
             {
                 continue;
             }
 
-            ResolveIdentity(pair, sourceGroups, destinationGroups, actions, issues);
+            ResolveIdentity(pair, groups, actions, issues);
         }
     }
 
     private static void ResolveIdentity(
         KeyValuePair<string, List<PdfEntry>> pdfGroup,
-        IReadOnlyDictionary<string, List<DocumentRecord>> sourceGroups,
-        IReadOnlyDictionary<string, List<DocumentRecord>> destinationGroups,
+        PlanningGroups groups,
         ICollection<TransferAction> actions,
         ICollection<TransferIssue> issues)
     {
-        var sources = sourceGroups.GetValueOrDefault(pdfGroup.Key) ?? [];
-        var destinations = destinationGroups.GetValueOrDefault(pdfGroup.Key) ?? [];
+        var sources = groups.Source.GetValueOrDefault(pdfGroup.Key) ?? [];
+        var destinations = groups.Destination.GetValueOrDefault(pdfGroup.Key) ?? [];
         if (sources.Count == 1)
         {
             actions.Add(CreateSourceAction(pdfGroup, sources[0], destinations.FirstOrDefault()));
@@ -159,13 +162,14 @@ public sealed class TransferPlanner
         DocumentRecord source,
         DocumentRecord? destination)
     {
-        return new TransferAction(
-            destination is null ? ActionType.Add : ActionType.Replace,
-            pdfGroup.Key,
-            pdfGroup.Value[0].OriginalText,
-            pdfGroup.Value,
-            source,
-            destination);
+        if (destination is null)
+        {
+            return TransferAction.Add(
+                pdfGroup.Key, pdfGroup.Value[0].OriginalText, pdfGroup.Value, source);
+        }
+
+        return TransferAction.Replace(
+            pdfGroup.Key, pdfGroup.Value[0].OriginalText, pdfGroup.Value, source, destination);
     }
 
     private static UnsafeResolution ResolveUnsafeSource(
@@ -179,13 +183,11 @@ public sealed class TransferPlanner
             : $"El origen contiene {sources.Count} registros con la misma identidad.";
         var references = pdfGroup.Value.Select(entry => entry.Location)
             .Concat(sources.Select(record => record.Location)).ToArray();
-        var action = new TransferAction(
-            destination is null ? ActionType.Skip : ActionType.Keep,
-            pdfGroup.Key,
-            pdfGroup.Value[0].OriginalText,
-            pdfGroup.Value,
-            Destination: destination,
-            Reason: issueType);
+        var action = destination is null
+            ? TransferAction.Skip(
+                pdfGroup.Key, pdfGroup.Value[0].OriginalText, pdfGroup.Value, issueType)
+            : TransferAction.Keep(
+                pdfGroup.Key, pdfGroup.Value[0].OriginalText, pdfGroup.Value, destination, issueType);
         var issue = new TransferIssue(
             issueType, pdfGroup.Key, pdfGroup.Value[0].OriginalText, detail, references);
         return new UnsafeResolution(action, issue);
@@ -193,21 +195,26 @@ public sealed class TransferPlanner
 
     private static void AddDeletions(
         DocumentSnapshot destination,
-        IReadOnlyDictionary<string, List<PdfEntry>> pdfGroups,
-        IReadOnlySet<string> ambiguousKeys,
+        PlanningGroups groups,
         ICollection<TransferAction> actions)
     {
         foreach (var record in destination.Records)
         {
-            if (pdfGroups.ContainsKey(record.IdentityKey) || ambiguousKeys.Contains(record.IdentityKey))
+            if (groups.Pdf.ContainsKey(record.IdentityKey)
+                || groups.AmbiguousDestinationKeys.Contains(record.IdentityKey))
             {
                 continue;
             }
 
-            actions.Add(new TransferAction(
-                ActionType.Delete, record.IdentityKey, record.OriginalName, [], Destination: record));
+            actions.Add(TransferAction.Delete(record.IdentityKey, record.OriginalName, record));
         }
     }
 
     private sealed record UnsafeResolution(TransferAction Action, TransferIssue Issue);
+
+    private sealed record PlanningGroups(
+        IReadOnlyDictionary<string, List<PdfEntry>> Pdf,
+        IReadOnlyDictionary<string, List<DocumentRecord>> Source,
+        IReadOnlyDictionary<string, List<DocumentRecord>> Destination,
+        IReadOnlySet<string> AmbiguousDestinationKeys);
 }

@@ -108,7 +108,7 @@ public sealed class CliParser
         string argument,
         bool positionalOnly)
     {
-        if (!positionalOnly && argument.StartsWith("-", StringComparison.Ordinal))
+        if (!positionalOnly && argument.StartsWith('-'))
         {
             throw new CliUsageException($"unrecognized arguments: {argument}");
         }

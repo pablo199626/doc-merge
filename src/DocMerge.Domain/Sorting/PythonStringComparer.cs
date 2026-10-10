@@ -2,14 +2,17 @@ using System.Text;
 
 namespace DocMerge.Domain.Sorting;
 
+/// <summary>Compares strings by Unicode code point to match Python ordering.</summary>
 public sealed class PythonStringComparer : IComparer<string>
 {
+    /// <summary>Gets the shared comparer instance.</summary>
     public static readonly PythonStringComparer Instance = new();
 
     private PythonStringComparer()
     {
     }
 
+    /// <inheritdoc/>
     public int Compare(string? left, string? right)
     {
         if (ReferenceEquals(left, right))

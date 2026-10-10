@@ -4,6 +4,7 @@ using DocMerge.Application.Pdf;
 using DocMerge.Domain.Identity;
 using DocMerge.Domain.Pdf;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 using UglyToad.PdfPig.Exceptions;
 
@@ -15,7 +16,7 @@ public sealed partial class PdfPigNameReader : IPdfNameReader
 
     public PdfPigNameReader(PdfPageParser parser)
     {
-        _parser = parser;
+        _parser = parser ?? throw new ArgumentNullException(nameof(parser));
     }
 
     public async Task<PdfReadResult> ReadAsync(
@@ -43,7 +44,10 @@ public sealed partial class PdfPigNameReader : IPdfNameReader
         {
             throw;
         }
-        catch (Exception error)
+        catch (Exception error) when (error is IOException
+            or InvalidDataException
+            or UnauthorizedAccessException
+            or PdfDocumentFormatException)
         {
             throw new PdfInputException($"No se pudo leer el PDF: {error.Message}", error);
         }

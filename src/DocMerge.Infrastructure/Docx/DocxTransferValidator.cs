@@ -23,7 +23,7 @@ public sealed class DocxTransferValidator : ITransferResultValidator
 
     public DocxTransferValidator(IDocumentReader reader)
     {
-        _reader = reader;
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
     }
 
     public async Task ValidateAsync(
@@ -31,8 +31,14 @@ public sealed class DocxTransferValidator : ITransferResultValidator
         CancellationToken cancellationToken)
     {
         var result = await _reader.ReadAsync(request.ResultPath, request.Header, cancellationToken);
-        ValidateRecords(result, ExpectedRecords(request.Plan), request.SortingProfile);
-        ValidatePackage(request.ResultPath, request.DestinationPath, result, request.Header);
+        var expected = ExpectedRecords(request.Plan)
+            .OrderBy(
+                record => request.SortingProfile.CreateKey(record.OriginalName),
+                SortKeyComparer.Instance)
+            .ToArray();
+        ValidateRecords(result, expected, cancellationToken);
+        var context = new PackageValidationContext(request, result, expected);
+        await ValidatePackageAsync(context, cancellationToken);
     }
 
     private static IReadOnlyList<DocumentRecord> ExpectedRecords(TransferPlan plan)
@@ -56,19 +62,18 @@ public sealed class DocxTransferValidator : ITransferResultValidator
     private static void ValidateRecords(
         DocumentSnapshot result,
         IReadOnlyList<DocumentRecord> expected,
-        SortingProfile profile)
+        CancellationToken cancellationToken)
     {
-        var ordered = expected.OrderBy(
-            record => profile.CreateKey(record.OriginalName), SortKeyComparer.Instance).ToArray();
-        if (result.Records.Count != ordered.Length)
+        if (result.Records.Count != expected.Count)
         {
             throw new TransferValidationException(
-                $"El resultado contiene {result.Records.Count} personas; se esperaban {ordered.Length}.");
+                $"El resultado contiene {result.Records.Count} personas; se esperaban {expected.Count}.");
         }
 
-        for (var index = 0; index < ordered.Length; index++)
+        for (var index = 0; index < expected.Count; index++)
         {
-            ValidateRecord(result.Records[index], ordered[index]);
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateRecord(result.Records[index], expected[index]);
         }
     }
 
@@ -114,28 +119,44 @@ public sealed class DocxTransferValidator : ITransferResultValidator
         }
     }
 
-    private static void ValidatePackage(
-        string resultPath,
-        string destinationPath,
-        DocumentSnapshot result,
-        string header)
+    private static async Task ValidatePackageAsync(
+        PackageValidationContext context,
+        CancellationToken cancellationToken)
     {
-        var resultParts = ReadParts(resultPath);
-        var destinationParts = ReadParts(destinationPath);
-        ValidateDestinationParts(destinationParts, resultParts);
-        ValidateOutsideTable(destinationParts, resultParts, header);
-        ValidateReferences(resultParts, result);
+        var request = context.Request;
+        var resultParts = await ReadPartsAsync(request.ResultPath, cancellationToken);
+        var sourceParts = await ReadPartsAsync(request.SourcePath, cancellationToken);
+        var destinationParts = await ReadPartsAsync(request.DestinationPath, cancellationToken);
+        ValidateDestinationParts(destinationParts, resultParts, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateOutsideTable(destinationParts, resultParts, request.Header);
+        ValidateReferences(resultParts, context.Result, cancellationToken);
+        var dependencyContext = new DocxDependencyValidator.DependencyValidationContext(
+            new DocxDependencyValidator.DocumentPackage(request.SourcePath, sourceParts),
+            new DocxDependencyValidator.DocumentPackage(request.DestinationPath, destinationParts),
+            resultParts);
+        DocxDependencyValidator.Validate(
+            dependencyContext,
+            context.Expected,
+            context.Result.Records,
+            cancellationToken);
     }
 
-    private static Dictionary<string, byte[]> ReadParts(string path)
+    private static async Task<Dictionary<string, byte[]>> ReadPartsAsync(
+        string path,
+        CancellationToken cancellationToken)
     {
         try
         {
             using var archive = ZipFile.OpenRead(path);
-            return archive.Entries.ToDictionary(
-                entry => entry.FullName,
-                ReadEntry,
-                StringComparer.Ordinal);
+            var parts = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            foreach (var entry in archive.Entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                parts.Add(entry.FullName, await ReadEntryAsync(entry, cancellationToken));
+            }
+
+            return parts;
         }
         catch (InvalidDataException error)
         {
@@ -144,20 +165,24 @@ public sealed class DocxTransferValidator : ITransferResultValidator
         }
     }
 
-    private static byte[] ReadEntry(ZipArchiveEntry entry)
+    private static async Task<byte[]> ReadEntryAsync(
+        ZipArchiveEntry entry,
+        CancellationToken cancellationToken)
     {
         using var stream = entry.Open();
         using var buffer = new MemoryStream();
-        stream.CopyTo(buffer);
+        await stream.CopyToAsync(buffer, cancellationToken);
         return buffer.ToArray();
     }
 
     private static void ValidateDestinationParts(
         IReadOnlyDictionary<string, byte[]> destination,
-        IReadOnlyDictionary<string, byte[]> result)
+        IReadOnlyDictionary<string, byte[]> result,
+        CancellationToken cancellationToken)
     {
         foreach (var part in destination)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!result.TryGetValue(part.Key, out var content))
             {
                 throw new TransferValidationException(
@@ -190,13 +215,15 @@ public sealed class DocxTransferValidator : ITransferResultValidator
 
     private static void ValidateReferences(
         IReadOnlyDictionary<string, byte[]> parts,
-        DocumentSnapshot result)
+        DocumentSnapshot result,
+        CancellationToken cancellationToken)
     {
         var styles = ReadDeclaredIds(parts, DocxNames.StylesPart, "style", DocxNames.StyleId);
         var numbering = ReadDeclaredIds(
             parts, DocxNames.NumberingPart, "num", DocxNames.Word + "numId");
         foreach (var record in result.Records)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ValidateRecordReferences(record, styles, numbering);
         }
     }
@@ -239,4 +266,9 @@ public sealed class DocxTransferValidator : ITransferResultValidator
                 $"La fila {record.Location} usa numeraciones inexistentes: [{string.Join(", ", missingNumbering)}]");
         }
     }
+
+    private sealed record PackageValidationContext(
+        TransferValidationRequest Request,
+        DocumentSnapshot Result,
+        IReadOnlyList<DocumentRecord> Expected);
 }

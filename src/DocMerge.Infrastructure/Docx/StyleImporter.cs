@@ -5,12 +5,15 @@ namespace DocMerge.Infrastructure.Docx;
 
 internal static class StyleImporter
 {
+    private static readonly string[] LinkedStyleElementNames = ["basedOn", "link"];
+
     internal static StyleImportResult Import(
         DocxPackage source,
         DocxPackage destination,
-        IReadOnlyList<XElement> rows)
+        IReadOnlyList<XElement> rows,
+        CancellationToken cancellationToken)
     {
-        var references = CollectReferences(rows);
+        var references = CollectReferences(rows, cancellationToken);
         if (references.Count == 0)
         {
             return StyleImportResult.Empty;
@@ -19,22 +22,39 @@ internal static class StyleImporter
         var documents = LoadDocuments(source, destination);
         var sourceStyles = MapStyles(documents.Source.Root!);
         var destinationStyles = MapStyles(documents.Destination.Root!);
-        var dependencies = CollectDependencies(references, sourceStyles);
-        var conflicts = FindConflicts(dependencies, sourceStyles, destinationStyles);
+        var dependencies = CollectDependencies(references, sourceStyles, cancellationToken);
+        var conflicts = FindConflicts(
+            dependencies, sourceStyles, destinationStyles, cancellationToken);
         var mapping = CreateMapping(dependencies, conflicts, destinationStyles.Keys);
         var imported = ImportStyles(
-            dependencies, sourceStyles, destinationStyles, documents.Destination.Root!, mapping);
+            dependencies,
+            sourceStyles,
+            destinationStyles,
+            documents.Destination.Root!,
+            mapping,
+            cancellationToken);
         return new StyleImportResult(mapping, documents.Destination, imported);
     }
 
-    private static HashSet<string> CollectReferences(IReadOnlyList<XElement> rows)
+    private static HashSet<string> CollectReferences(
+        IReadOnlyList<XElement> rows,
+        CancellationToken cancellationToken)
     {
-        return rows.SelectMany(row => row.DescendantsAndSelf())
-            .Where(element => DocxNames.StyleTags.Contains(element.Name))
-            .Select(element => element.Attribute(DocxNames.Value)?.Value)
-            .Where(value => !string.IsNullOrEmpty(value))
-            .Select(value => value!)
-            .ToHashSet(StringComparer.Ordinal);
+        var references = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var values = row.DescendantsAndSelf()
+                .Where(element => DocxNames.StyleTags.Contains(element.Name))
+                .Select(element => element.Attribute(DocxNames.Value)?.Value)
+                .Where(value => !string.IsNullOrEmpty(value));
+            foreach (var value in values)
+            {
+                references.Add(value!);
+            }
+        }
+
+        return references;
     }
 
     private static StyleDocuments LoadDocuments(DocxPackage source, DocxPackage destination)
@@ -60,13 +80,16 @@ internal static class StyleImporter
 
     private static IReadOnlyList<string> CollectDependencies(
         IEnumerable<string> references,
-        IReadOnlyDictionary<string, XElement> sourceStyles)
+        IReadOnlyDictionary<string, XElement> sourceStyles,
+        CancellationToken cancellationToken)
     {
         var pending = new Queue<string>(references);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
         var result = new List<string>();
         while (pending.TryDequeue(out var id))
         {
-            if (result.Contains(id, StringComparer.Ordinal))
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!visited.Add(id))
             {
                 continue;
             }
@@ -89,7 +112,7 @@ internal static class StyleImporter
 
     private static IEnumerable<string> LinkedStyles(XElement style)
     {
-        return new[] { "basedOn", "link" }
+        return LinkedStyleElementNames
             .Select(name => style.Element(DocxNames.Word + name)?.Attribute(DocxNames.Value)?.Value)
             .Where(value => !string.IsNullOrEmpty(value))
             .Select(value => value!);
@@ -98,13 +121,15 @@ internal static class StyleImporter
     private static HashSet<string> FindConflicts(
         IReadOnlyList<string> dependencies,
         IReadOnlyDictionary<string, XElement> source,
-        IReadOnlyDictionary<string, XElement> destination)
+        IReadOnlyDictionary<string, XElement> destination,
+        CancellationToken cancellationToken)
     {
         var conflicts = dependencies
             .Where(id => destination.TryGetValue(id, out var existing)
                 && !XNode.DeepEquals(source[id], existing))
             .ToHashSet(StringComparer.Ordinal);
-        while (AddInheritedConflicts(dependencies, source, destination, conflicts))
+        while (AddInheritedConflicts(
+            dependencies, source, destination, conflicts, cancellationToken))
         {
         }
 
@@ -115,11 +140,13 @@ internal static class StyleImporter
         IReadOnlyList<string> dependencies,
         IReadOnlyDictionary<string, XElement> source,
         IReadOnlyDictionary<string, XElement> destination,
-        ISet<string> conflicts)
+        ISet<string> conflicts,
+        CancellationToken cancellationToken)
     {
         var added = false;
         foreach (var id in dependencies)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (conflicts.Contains(id) || !destination.ContainsKey(id))
             {
                 continue;
@@ -165,11 +192,13 @@ internal static class StyleImporter
         IReadOnlyDictionary<string, XElement> source,
         IReadOnlyDictionary<string, XElement> destination,
         XElement destinationRoot,
-        IReadOnlyDictionary<string, string> mapping)
+        IReadOnlyDictionary<string, string> mapping,
+        CancellationToken cancellationToken)
     {
         var imported = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in dependencies)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (destination.ContainsKey(mapping[id]))
             {
                 continue;
@@ -189,7 +218,7 @@ internal static class StyleImporter
         XElement style,
         IReadOnlyDictionary<string, string> mapping)
     {
-        foreach (var name in new[] { "basedOn", "link" })
+        foreach (var name in LinkedStyleElementNames)
         {
             var attribute = style.Element(DocxNames.Word + name)?.Attribute(DocxNames.Value);
             if (attribute is not null && mapping.TryGetValue(attribute.Value, out var mapped))

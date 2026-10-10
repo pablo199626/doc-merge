@@ -2,8 +2,10 @@ using DocMerge.Domain.Identity;
 
 namespace DocMerge.Domain.Sorting;
 
+/// <summary>Implements the certified historical name interpretation heuristic.</summary>
 public sealed class LegacyNameInterpreter : INameInterpreter
 {
+    /// <inheritdoc/>
     public NameParts? Interpret(string fullName)
     {
         ArgumentNullException.ThrowIfNull(fullName);

@@ -6,38 +6,45 @@ namespace DocMerge.Infrastructure.Docx;
 
 internal sealed class NumberingImporter
 {
-    private readonly DocxPackage _source;
     private readonly StyleImportResult _styles;
     private readonly Dictionary<string, string> _mapping = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _abstractMapping = new(StringComparer.Ordinal);
-    private Dictionary<string, XElement> _sourceNumbers = null!;
-    private Dictionary<string, XElement> _sourceAbstracts = null!;
-    private XDocument _destinationDocument = null!;
+    private readonly IReadOnlyDictionary<string, XElement> _sourceNumbers;
+    private readonly IReadOnlyDictionary<string, XElement> _sourceAbstracts;
+    private readonly XDocument _destinationDocument;
     private int _nextNumberId;
     private int _nextAbstractId;
 
-    private NumberingImporter(DocxPackage source, StyleImportResult styles)
+    private NumberingImporter(
+        StyleImportResult styles,
+        NumberingDefinitions definitions)
     {
-        _source = source;
         _styles = styles;
+        _sourceNumbers = definitions.SourceNumbers;
+        _sourceAbstracts = definitions.SourceAbstracts;
+        _destinationDocument = definitions.DestinationDocument;
+        _nextNumberId = NextNumericId(definitions.DestinationNumbers.Keys);
+        _nextAbstractId = NextNumericId(definitions.DestinationAbstracts.Keys);
     }
 
     internal static NumberingImportResult Import(
         DocxPackage source,
         DocxPackage destination,
         IReadOnlyList<XElement> rows,
-        StyleImportResult styles)
+        StyleImportResult styles,
+        CancellationToken cancellationToken)
     {
-        var references = CollectReferences(source, rows, styles);
+        var references = CollectReferences(source, rows, styles, cancellationToken);
         if (references.Count == 0)
         {
             return NumberingImportResult.Empty;
         }
 
-        var importer = new NumberingImporter(source, styles);
-        importer.LoadDefinitions(destination);
+        var definitions = LoadDefinitions(source, destination);
+        var importer = new NumberingImporter(styles, definitions);
         foreach (var id in references.OrderBy(id => id, NumberingSortKey.Instance))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             importer.ImportNumber(id);
         }
 
@@ -48,21 +55,31 @@ internal sealed class NumberingImporter
     private static HashSet<string> CollectReferences(
         DocxPackage source,
         IReadOnlyList<XElement> rows,
-        StyleImportResult styles)
+        StyleImportResult styles,
+        CancellationToken cancellationToken)
     {
-        var references = rows.SelectMany(row => row.DescendantsAndSelf(DocxNames.Word + "numId"))
-            .Select(element => element.Attribute(DocxNames.Value)?.Value)
-            .Where(value => value is not null and not "0")
-            .Select(value => value!)
-            .ToHashSet(StringComparer.Ordinal);
-        AddStyleReferences(source, styles, references);
+        var references = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var values = row.DescendantsAndSelf(DocxNames.Word + "numId")
+                .Select(element => element.Attribute(DocxNames.Value)?.Value)
+                .Where(value => value is not null and not "0");
+            foreach (var value in values)
+            {
+                references.Add(value!);
+            }
+        }
+
+        AddStyleReferences(source, styles, references, cancellationToken);
         return references;
     }
 
     private static void AddStyleReferences(
         DocxPackage source,
         StyleImportResult styles,
-        ISet<string> references)
+        ISet<string> references,
+        CancellationToken cancellationToken)
     {
         if (styles.ImportedIds.Count == 0
             || !source.Parts.TryGetValue(DocxNames.StylesPart, out var content))
@@ -74,6 +91,7 @@ internal sealed class NumberingImporter
             .Elements(DocxNames.Word + "style");
         foreach (var style in sourceStyles.Where(style => IsImportedStyle(style, styles)))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             foreach (var id in style.Descendants(DocxNames.Word + "numId")
                 .Select(element => element.Attribute(DocxNames.Value)?.Value)
                 .Where(value => value is not null and not "0"))
@@ -91,9 +109,11 @@ internal sealed class NumberingImporter
             && styles.ImportedIds.Contains(mapped);
     }
 
-    private void LoadDefinitions(DocxPackage destination)
+    private static NumberingDefinitions LoadDefinitions(
+        DocxPackage source,
+        DocxPackage destination)
     {
-        if (!_source.Parts.TryGetValue(DocxNames.NumberingPart, out var sourcePart)
+        if (!source.Parts.TryGetValue(DocxNames.NumberingPart, out var sourcePart)
             || !destination.Parts.TryGetValue(DocxNames.NumberingPart, out var destinationPart))
         {
             throw new DocumentStructureException(
@@ -101,14 +121,18 @@ internal sealed class NumberingImporter
         }
 
         var sourceRoot = DocxXml.Parse(sourcePart).Root!;
-        _destinationDocument = DocxXml.Parse(destinationPart);
-        _sourceNumbers = MapByAttribute(sourceRoot, "num", "numId");
-        _sourceAbstracts = MapByAttribute(sourceRoot, "abstractNum", "abstractNumId");
-        var destinationNumbers = MapByAttribute(_destinationDocument.Root!, "num", "numId");
+        var destinationDocument = DocxXml.Parse(destinationPart);
+        var sourceNumbers = MapByAttribute(sourceRoot, "num", "numId");
+        var sourceAbstracts = MapByAttribute(sourceRoot, "abstractNum", "abstractNumId");
+        var destinationNumbers = MapByAttribute(destinationDocument.Root!, "num", "numId");
         var destinationAbstracts = MapByAttribute(
-            _destinationDocument.Root!, "abstractNum", "abstractNumId");
-        _nextNumberId = NextNumericId(destinationNumbers.Keys);
-        _nextAbstractId = NextNumericId(destinationAbstracts.Keys);
+            destinationDocument.Root!, "abstractNum", "abstractNumId");
+        return new NumberingDefinitions(
+            sourceNumbers,
+            sourceAbstracts,
+            destinationNumbers,
+            destinationAbstracts,
+            destinationDocument);
     }
 
     private static Dictionary<string, XElement> MapByAttribute(
@@ -242,6 +266,13 @@ internal sealed class NumberingImporter
             return StringComparer.Ordinal.Compare(left, right);
         }
     }
+
+    private sealed record NumberingDefinitions(
+        IReadOnlyDictionary<string, XElement> SourceNumbers,
+        IReadOnlyDictionary<string, XElement> SourceAbstracts,
+        IReadOnlyDictionary<string, XElement> DestinationNumbers,
+        IReadOnlyDictionary<string, XElement> DestinationAbstracts,
+        XDocument DestinationDocument);
 }
 
 internal sealed record NumberingImportResult(

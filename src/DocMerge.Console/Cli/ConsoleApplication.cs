@@ -1,6 +1,8 @@
+using DocMerge.Application.Documents;
 using DocMerge.Application.Errors;
 using DocMerge.Application.Sorting;
 using DocMerge.Application.Transfer;
+using DocMerge.Console.Interactive;
 using DocMerge.Console.IO;
 using DocMerge.Console.Presentation;
 using DocMerge.Domain.Sorting;
@@ -9,26 +11,27 @@ namespace DocMerge.Console.Cli;
 
 public sealed class ConsoleApplication
 {
-    private const string DocxExtension = ".docx";
-    private const string PdfExtension = ".pdf";
     private static readonly HashSet<string> AffirmativeAnswers =
         new(StringComparer.Ordinal) { "s", "si", "sí" };
 
     private readonly CliParser _parser;
     private readonly IConsoleIO _console;
+    private readonly InteractiveWizard _wizard;
     private readonly SortDocumentService _sortService;
     private readonly TransferService _transferService;
 
     public ConsoleApplication(
         CliParser parser,
         IConsoleIO console,
+        InteractiveWizard wizard,
         SortDocumentService sortService,
         TransferService transferService)
     {
-        _parser = parser;
-        _console = console;
-        _sortService = sortService;
-        _transferService = transferService;
+        _parser = parser ?? throw new ArgumentNullException(nameof(parser));
+        _console = console ?? throw new ArgumentNullException(nameof(console));
+        _wizard = wizard ?? throw new ArgumentNullException(nameof(wizard));
+        _sortService = sortService ?? throw new ArgumentNullException(nameof(sortService));
+        _transferService = transferService ?? throw new ArgumentNullException(nameof(transferService));
     }
 
     public async Task<int> RunAsync(
@@ -36,6 +39,7 @@ public sealed class ConsoleApplication
         CancellationToken cancellationToken)
     {
         var isDoubleClick = arguments.Count == 0;
+        var shouldPause = isDoubleClick;
         try
         {
             var options = _parser.Parse(arguments);
@@ -46,16 +50,22 @@ public sealed class ConsoleApplication
 
             if (isDoubleClick)
             {
-                options = RunWizard(options);
+                options = _wizard.Run(options);
             }
 
-            var context = BuildContext(options);
+            var context = CliExecutionContextFactory.Create(options);
             await ExecuteContextAsync(context, cancellationToken);
             return 0;
         }
         catch (CliUsageException error)
         {
             return HandleUsageError(error, isDoubleClick);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            shouldPause = false;
+            _console.WriteError("Operación cancelada.");
+            return isDoubleClick ? 0 : 1;
         }
         catch (Exception error) when (error is IOException
             or InvalidDataException
@@ -67,7 +77,7 @@ public sealed class ConsoleApplication
         }
         finally
         {
-            if (isDoubleClick)
+            if (shouldPause)
             {
                 _console.ReadLine(Environment.NewLine + "Pulsa Intro para cerrar...");
             }
@@ -91,142 +101,6 @@ public sealed class ConsoleApplication
         return false;
     }
 
-    private CliOptions RunWizard(CliOptions options)
-    {
-        ShowWizardHeader();
-        var selected = _console.ReadLine(Environment.NewLine + "Elige una opción [1]: ").Trim();
-        selected = selected.Length == 0 ? "1" : selected;
-        if (selected is not ("1" or "2"))
-        {
-            throw new CliUsageException("la opción debe ser 1 o 2");
-        }
-
-        var source = CleanPath(_console.ReadLine("Ruta del documento Word de origen: "));
-        return selected == "2"
-            ? SortWizardOptions(options, source)
-            : TransferWizardOptions(options, source);
-    }
-
-    private CliOptions SortWizardOptions(CliOptions options, string source)
-    {
-        return options with
-        {
-            Source = source,
-            Output = AskOptionalOutput(),
-            IsInteractive = true,
-        };
-    }
-
-    private CliOptions TransferWizardOptions(CliOptions options, string source)
-    {
-        var destination = CleanPath(_console.ReadLine("Ruta del documento Word de destino: "));
-        var pdfList = CleanPath(_console.ReadLine("Ruta del listado PDF: "));
-        var output = AskOptionalOutput();
-        var answer = _console.ReadLine(
-            "¿Solo simular sin crear el documento? (s/n) [n]: ").Trim();
-        return options with
-        {
-            Source = source,
-            Destination = destination,
-            PdfList = pdfList,
-            Output = output,
-            Simulate = AffirmativeAnswers.Contains(answer.ToLowerInvariant()),
-            IsInteractive = true,
-        };
-    }
-
-    private string? AskOptionalOutput()
-    {
-        var output = CleanPath(_console.ReadLine(
-            "Ruta de salida (Intro para usar la predeterminada): "));
-        return output.Length == 0 ? null : output;
-    }
-
-    private void ShowWizardHeader()
-    {
-        _console.WriteLine($"DOCMERGE {ProductVersion.Value}");
-        _console.WriteLine("==============");
-        _console.WriteLine("1. Transferir personas usando un listado PDF");
-        _console.WriteLine("2. Ordenar alfabéticamente un documento Word");
-    }
-
-    private static ExecutionContext BuildContext(CliOptions options)
-    {
-        if (string.IsNullOrEmpty(options.Source))
-        {
-            throw new CliUsageException("debes indicar un documento de entrada");
-        }
-
-        RequireExistingFile(options.Source, DocxExtension, "el archivo de entrada no es un DOCX existente");
-        var transferInputs = BuildTransferInputs(options);
-        var output = SelectOutputPath(options, transferInputs);
-        if (!string.Equals(Path.GetExtension(output), DocxExtension, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new CliUsageException("el archivo de salida debe tener extensión .docx");
-        }
-
-        ValidateDistinctOutput(options.Source, output, transferInputs);
-        return new ExecutionContext(options, options.Source, output, transferInputs);
-    }
-
-    private static TransferInputs? BuildTransferInputs(CliOptions options)
-    {
-        var hasTransferOption = options.Destination is not null || options.PdfList is not null;
-        if (!hasTransferOption)
-        {
-            if (options.Simulate)
-            {
-                throw new CliUsageException(
-                    "--simular solo está disponible junto con --destino y --lista");
-            }
-
-            return null;
-        }
-
-        if (string.IsNullOrEmpty(options.Destination) || string.IsNullOrEmpty(options.PdfList))
-        {
-            throw new CliUsageException("--destino y --lista deben indicarse conjuntamente");
-        }
-
-        RequireExistingFile(options.Destination, DocxExtension, "el destino no es un DOCX existente");
-        RequireExistingFile(options.PdfList, PdfExtension, "el listado no es un PDF existente");
-        return new TransferInputs(options.Source!, options.Destination, options.PdfList, options.Header);
-    }
-
-    private static string SelectOutputPath(CliOptions options, TransferInputs? transfer)
-    {
-        if (!string.IsNullOrEmpty(options.Output))
-        {
-            return options.Output;
-        }
-
-        var basis = transfer?.DestinationPath ?? options.Source!;
-        var suffix = transfer is null ? "_ordenado" : "_generado";
-        return Path.Combine(
-            Path.GetDirectoryName(basis) ?? string.Empty,
-            $"{Path.GetFileNameWithoutExtension(basis)}{suffix}{Path.GetExtension(basis)}");
-    }
-
-    private static void ValidateDistinctOutput(
-        string source,
-        string output,
-        TransferInputs? transfer)
-    {
-        var inputs = new List<string> { source };
-        if (transfer is not null)
-        {
-            inputs.Add(transfer.DestinationPath);
-            inputs.Add(transfer.ListPath);
-        }
-
-        if (inputs.Any(path => string.Equals(
-            Path.GetFullPath(path), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new CliUsageException(
-                "el archivo de salida debe ser distinto de todos los archivos de entrada");
-        }
-    }
-
     private async Task ExecuteContextAsync(
         ExecutionContext context,
         CancellationToken cancellationToken)
@@ -243,12 +117,12 @@ public sealed class ConsoleApplication
             return;
         }
 
-        var count = await _sortService.ExecuteAsync(
+        var request = new SortDocumentRequest(
             context.SourcePath,
             context.OutputPath,
             SortingProfiles.Get(context.Options.SortRule),
-            context.Options.Header,
-            cancellationToken);
+            context.Options.Header);
+        var count = await _sortService.ExecuteAsync(request, cancellationToken);
         _console.WriteLine($"Documento creado: {context.OutputPath}");
         _console.WriteLine($"Filas ordenadas: {count}");
     }
@@ -307,17 +181,4 @@ public sealed class ConsoleApplication
         return 2;
     }
 
-    private static void RequireExistingFile(string path, string extension, string description)
-    {
-        if (!string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase)
-            || !File.Exists(path))
-        {
-            throw new CliUsageException($"{description}: {path}");
-        }
-    }
-
-    private static string CleanPath(string value)
-    {
-        return value.Trim().Trim('"').Trim('\'');
-    }
 }

@@ -5,6 +5,7 @@ using DocMerge.Application.Sorting;
 using DocMerge.Application.Transfer;
 using DocMerge.Application.Validation;
 using DocMerge.Console.Cli;
+using DocMerge.Console.Interactive;
 using DocMerge.Console.IO;
 using DocMerge.Domain.Documents;
 using DocMerge.Domain.Pdf;
@@ -44,15 +45,47 @@ public sealed class ConsoleApplicationTests
         }
     }
 
+    [Fact]
+    public async Task RunAsync_CancelledOperation_ReturnsOneAndReportsCancellation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"docmerge_cli_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = CreateFile(root, "source.docx");
+            var output = Path.Combine(root, "output.docx");
+            var console = new FakeConsole([]);
+            var application = CreateApplication(console);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            var exitCode = await application.RunAsync(
+                [source, "-o", output, "--force"], cancellation.Token);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Operación cancelada.", console.Output);
+            Assert.Empty(console.Prompts);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static ConsoleApplication CreateApplication(IConsoleIO console)
     {
         var editor = new StubEditor();
         var reader = new StubDocumentReader();
+        var fileStore = new StubFileStore();
         var transferService = new TransferService(
-            new StubPdfReader(), reader, editor, new StubValidator(),
-            new StubFileStore(), new TransferPlanner());
+            new StubPdfReader(), reader, editor, editor, new StubValidator(),
+            fileStore, new TransferPlanner());
         return new ConsoleApplication(
-            new CliParser(), console, new SortDocumentService(editor), transferService);
+            new CliParser(),
+            console,
+            new InteractiveWizard(console),
+            new SortDocumentService(editor, fileStore),
+            transferService);
     }
 
     private static string CreateFile(string root, string name)
@@ -105,15 +138,23 @@ public sealed class ConsoleApplicationTests
         }
     }
 
-    private sealed class StubEditor : IDocumentEditor
+    private sealed class StubEditor : IDocumentSorter, ITransferPlanEditor
     {
         public Task<int> SortAsync(
             SortDocumentRequest request,
-            CancellationToken cancellationToken) => Task.FromResult(0);
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(0);
+        }
 
         public Task<int> ApplyTransferPlanAsync(
             ApplyTransferPlanRequest request,
-            CancellationToken cancellationToken) => Task.FromResult(0);
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(0);
+        }
     }
 
     private sealed class StubValidator : ITransferResultValidator
@@ -125,11 +166,13 @@ public sealed class ConsoleApplicationTests
 
     private sealed class StubFileStore : IFileStore
     {
+        public string GetFullPath(string path) => Path.GetFullPath(path);
+
         public Task<string> ComputeHashAsync(string path, CancellationToken cancellationToken) =>
             Task.FromResult(string.Empty);
 
-        public string CreateTemporaryPath(string directory, string label) =>
-            Path.Combine(directory, $"{label}.docx");
+        public string CreateTemporaryPath(string outputPath, string label) =>
+            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, $"{label}.docx");
 
         public Task PublishAsync(
             string temporaryPath,

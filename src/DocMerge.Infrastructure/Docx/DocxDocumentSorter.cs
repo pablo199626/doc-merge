@@ -1,11 +1,10 @@
 using System.Xml.Linq;
 using DocMerge.Application.Documents;
 using DocMerge.Domain.Sorting;
-using DocMerge.Domain.Transfer;
 
 namespace DocMerge.Infrastructure.Docx;
 
-public sealed class DocxDocumentEditor : IDocumentEditor
+public sealed class DocxDocumentSorter : IDocumentSorter
 {
     public async Task<int> SortAsync(
         SortDocumentRequest request,
@@ -18,28 +17,25 @@ public sealed class DocxDocumentEditor : IDocumentEditor
         var document = DocxXml.Parse(documentPart);
         var location = DocxXml.LocateStrictTable(document, request.Header);
         var count = ReorderRows(
-            location.Table, location.HeaderIndex, location.NameColumnIndex, request.SortingProfile);
+            location.Table,
+            location.HeaderIndex,
+            location.NameColumnIndex,
+            request.SortingProfile,
+            cancellationToken);
         package.Parts[DocxNames.DocumentPart] = DocxXml.Serialize(document);
         await package.WriteAsync(request.OutputPath, cancellationToken);
         return count;
-    }
-
-    public Task<int> ApplyTransferPlanAsync(
-        ApplyTransferPlanRequest request,
-        CancellationToken cancellationToken)
-    {
-        var importer = new DocxTransferEditor();
-        return importer.ApplyAsync(request, cancellationToken);
     }
 
     private static int ReorderRows(
         XElement table,
         int headerIndex,
         int nameColumnIndex,
-        SortingProfile profile)
+        SortingProfile profile,
+        CancellationToken cancellationToken)
     {
         var rows = table.Elements(DocxNames.Word + "tr").ToArray();
-        var people = CollectPeople(rows, headerIndex, nameColumnIndex);
+        var people = CollectPeople(rows, headerIndex, nameColumnIndex, cancellationToken);
         if (people.Count == 0)
         {
             throw new DocumentStructureException(
@@ -50,6 +46,7 @@ public sealed class DocxDocumentEditor : IDocumentEditor
             .Select(item => new XElement(item.Row)).ToArray();
         for (var index = 0; index < people.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             people[index].Row.ReplaceWith(sorted[index]);
         }
 
@@ -59,11 +56,13 @@ public sealed class DocxDocumentEditor : IDocumentEditor
     private static List<PersonRow> CollectPeople(
         IReadOnlyList<XElement> rows,
         int headerIndex,
-        int nameColumnIndex)
+        int nameColumnIndex,
+        CancellationToken cancellationToken)
     {
         var result = new List<PersonRow>();
         foreach (var row in rows.Skip(headerIndex + 1))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var cells = DocxXml.RowCells(row);
             if (cells.Count <= nameColumnIndex)
             {
