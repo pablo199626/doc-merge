@@ -5,6 +5,11 @@ namespace DocMerge.Infrastructure.Files;
 
 public sealed class PhysicalFileStore : IFileStore
 {
+    public string GetFullPath(string path)
+    {
+        return Path.GetFullPath(path);
+    }
+
     public async Task<string> ComputeHashAsync(
         string path,
         CancellationToken cancellationToken)
@@ -15,8 +20,9 @@ public sealed class PhysicalFileStore : IFileStore
         return Convert.ToHexStringLower(hash);
     }
 
-    public string CreateTemporaryPath(string directory, string label)
+    public string CreateTemporaryPath(string outputPath, string label)
     {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
         Directory.CreateDirectory(directory);
         return Path.Combine(directory, $"docmerge_{Guid.NewGuid():N}_{label}.docx");
     }

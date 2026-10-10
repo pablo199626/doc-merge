@@ -6,59 +6,88 @@ using DocMerge.Domain.Transfer;
 
 namespace DocMerge.Application.Transfer;
 
+/// <summary>Coordinates planning, generation, validation, and atomic publication of transfers.</summary>
 public sealed class TransferService
 {
     private readonly IPdfNameReader _pdfReader;
     private readonly IDocumentReader _documentReader;
-    private readonly IDocumentEditor _documentEditor;
+    private readonly ITransferPlanEditor _transferEditor;
+    private readonly IDocumentSorter _sorter;
     private readonly ITransferResultValidator _validator;
     private readonly IFileStore _fileStore;
     private readonly TransferPlanner _planner;
 
+    /// <summary>Initializes a new instance of the <see cref="TransferService"/> class.</summary>
     public TransferService(
         IPdfNameReader pdfReader,
         IDocumentReader documentReader,
-        IDocumentEditor documentEditor,
+        ITransferPlanEditor transferEditor,
+        IDocumentSorter sorter,
         ITransferResultValidator validator,
         IFileStore fileStore,
         TransferPlanner planner)
     {
-        _pdfReader = pdfReader;
-        _documentReader = documentReader;
-        _documentEditor = documentEditor;
-        _validator = validator;
-        _fileStore = fileStore;
-        _planner = planner;
+        _pdfReader = pdfReader ?? throw new ArgumentNullException(nameof(pdfReader));
+        _documentReader = documentReader ?? throw new ArgumentNullException(nameof(documentReader));
+        _transferEditor = transferEditor ?? throw new ArgumentNullException(nameof(transferEditor));
+        _sorter = sorter ?? throw new ArgumentNullException(nameof(sorter));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
+        _planner = planner ?? throw new ArgumentNullException(nameof(planner));
     }
 
+    /// <summary>Reads the inputs and creates an immutable transfer plan.</summary>
+    /// <param name="inputs">The source, destination, PDF, and header inputs.</param>
+    /// <param name="cancellationToken">The token that cancels the operation.</param>
+    /// <returns>The prepared transfer plan.</returns>
     public async Task<TransferPlan> PrepareAsync(
         TransferInputs inputs,
         CancellationToken cancellationToken)
     {
+        return await PrepareAsync(inputs, null, cancellationToken);
+    }
+
+    private async Task<TransferPlan> PrepareAsync(
+        TransferInputs inputs,
+        IProgress<OperationProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        OperationRequestValidator.ValidateTransferInputs(inputs);
+        progress?.Report(new OperationProgress(OperationStage.ReadingInputs, 0));
         var pdf = await _pdfReader.ReadAsync(inputs.ListPath, cancellationToken);
         var source = await _documentReader.ReadAsync(
             inputs.SourcePath, inputs.Header, cancellationToken);
         var destination = await _documentReader.ReadAsync(
             inputs.DestinationPath, inputs.Header, cancellationToken);
+        progress?.Report(new OperationProgress(OperationStage.Planning, 0));
         return _planner.Create(pdf, source, destination);
     }
 
+    /// <summary>Generates, validates, and atomically publishes a transfer result.</summary>
+    /// <param name="request">The transfer execution request.</param>
+    /// <param name="progress">An optional progress receiver.</param>
+    /// <param name="cancellationToken">The token that cancels the operation.</param>
+    /// <returns>The published operation result.</returns>
     public async Task<OperationResult> ExecuteAsync(
         TransferExecutionRequest request,
         IProgress<OperationProgress>? progress,
         CancellationToken cancellationToken)
     {
-        progress?.Report(new OperationProgress(OperationStage.ReadingInputs, 0));
-        var plan = request.Plan ?? await PrepareAsync(request.Inputs, cancellationToken);
-        var directory = Path.GetDirectoryName(Path.GetFullPath(request.OutputPath))!;
-        Directory.CreateDirectory(directory);
-        var transferred = _fileStore.CreateTemporaryPath(directory, "transferido");
-        var sorted = _fileStore.CreateTemporaryPath(directory, "ordenado");
+        OperationRequestValidator.ValidateTransferExecution(request, _fileStore);
+        var plan = request.Plan
+            ?? await PrepareAsync(request.Inputs, progress, cancellationToken);
+        progress?.Report(new OperationProgress(OperationStage.VerifyingInputs, 0));
+        await VerifyInputsAsync(request.Inputs, plan, cancellationToken);
+        var transferred = _fileStore.CreateTemporaryPath(request.OutputPath, "transferido");
+        var sorted = _fileStore.CreateTemporaryPath(request.OutputPath, "ordenado");
         try
         {
-            await GenerateAndValidateAsync(request, plan, transferred, sorted, progress, cancellationToken);
+            var context = new TransferExecutionContext(
+                request, plan, transferred, sorted, progress);
+            await GenerateAndValidateAsync(context, cancellationToken);
             progress?.Report(new OperationProgress(OperationStage.Publishing, 0));
             await _fileStore.PublishAsync(sorted, request.OutputPath, cancellationToken);
+            progress?.Report(new OperationProgress(OperationStage.Completed, 1, 1));
             return new OperationResult(request.OutputPath, plan);
         }
         finally
@@ -69,29 +98,34 @@ public sealed class TransferService
     }
 
     private async Task GenerateAndValidateAsync(
-        TransferExecutionRequest request,
-        TransferPlan plan,
-        string transferred,
-        string sorted,
-        IProgress<OperationProgress>? progress,
+        TransferExecutionContext context,
         CancellationToken cancellationToken)
     {
-        progress?.Report(new OperationProgress(OperationStage.ImportingRows, 0, plan.Actions.Count));
+        var request = context.Request;
+        var plan = context.Plan;
+        context.Progress?.Report(new OperationProgress(
+            OperationStage.ImportingRows, 0, plan.Actions.Count));
         var applyRequest = new ApplyTransferPlanRequest(
             request.Inputs.SourcePath,
             request.Inputs.DestinationPath,
-            transferred,
+            context.TransferredPath,
             plan,
             request.Inputs.Header);
-        await _documentEditor.ApplyTransferPlanAsync(applyRequest, cancellationToken);
-        progress?.Report(new OperationProgress(OperationStage.Sorting, 0));
+        await _transferEditor.ApplyTransferPlanAsync(applyRequest, cancellationToken);
+        context.Progress?.Report(new OperationProgress(
+            OperationStage.ImportingRows, plan.Actions.Count, plan.Actions.Count));
+        context.Progress?.Report(new OperationProgress(OperationStage.Sorting, 0));
         var sortRequest = new SortDocumentRequest(
-            transferred, sorted, request.SortingProfile, request.Inputs.Header);
-        await _documentEditor.SortAsync(sortRequest, cancellationToken);
+            context.TransferredPath,
+            context.SortedPath,
+            request.SortingProfile,
+            request.Inputs.Header);
+        await _sorter.SortAsync(sortRequest, cancellationToken);
         await VerifyInputsAsync(request.Inputs, plan, cancellationToken);
-        progress?.Report(new OperationProgress(OperationStage.Validating, 0));
+        context.Progress?.Report(new OperationProgress(OperationStage.Validating, 0));
         var validationRequest = new TransferValidationRequest(
-            sorted,
+            context.SortedPath,
+            request.Inputs.SourcePath,
             request.Inputs.DestinationPath,
             plan,
             request.SortingProfile,
@@ -127,4 +161,11 @@ public sealed class TransferService
                 $"El archivo {description} cambió durante la operación.");
         }
     }
+
+    private sealed record TransferExecutionContext(
+        TransferExecutionRequest Request,
+        TransferPlan Plan,
+        string TransferredPath,
+        string SortedPath,
+        IProgress<OperationProgress>? Progress);
 }

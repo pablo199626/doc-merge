@@ -88,62 +88,55 @@ public sealed class DocxDocumentReader : IDocumentReader
     {
         var rows = location.Table.Elements(DocxNames.Word + "tr").ToArray();
         ValidateHeader(rows[location.HeaderIndex]);
-        var records = new List<DocumentRecord>();
-        var auxiliaryRows = new List<AuxiliaryRow>();
+        var context = new RowReadingContext(path, package, location, relationships);
+        var results = new RowResults([], []);
         for (var index = location.HeaderIndex + 1; index < rows.Length; index++)
         {
-            ReadRow(path, package, location, relationships, rows[index], index, records, auxiliaryRows);
+            ReadRow(context, rows[index], index, results);
         }
 
-        return new RowResults(records, auxiliaryRows);
+        return results;
     }
 
     private static void ReadRow(
-        string path,
-        DocxPackage package,
-        DocxXml.TableLocation location,
-        IReadOnlyDictionary<string, XElement> relationships,
+        RowReadingContext context,
         XElement row,
         int rowIndex,
-        ICollection<DocumentRecord> records,
-        ICollection<AuxiliaryRow> auxiliaryRows)
+        RowResults results)
     {
         var cells = ValidateCells(row, rowIndex);
         var texts = cells.Select(cell =>
             IdentityNormalizer.NormalizeWhitespace(DocxXml.ElementText(cell))).ToArray();
         if (texts.All(text => text.Length == 0))
         {
-            auxiliaryRows.Add(new AuxiliaryRow(rowIndex, SerializeElement(row)));
+            results.AuxiliaryRows.Add(new AuxiliaryRow(rowIndex, SerializeElement(row)));
             return;
         }
 
-        var name = texts[location.NameColumnIndex];
+        var name = texts[context.Location.NameColumnIndex];
         if (name.Length == 0)
         {
             throw new DocumentStructureException(
                 $"La fila {rowIndex} contiene datos, pero no tiene identidad en la columna de nombres.");
         }
 
-        records.Add(CreateRecord(path, package, relationships, row, rowIndex, location, name));
+        results.Records.Add(CreateRecord(context, row, rowIndex, name));
     }
 
     private static DocumentRecord CreateRecord(
-        string path,
-        DocxPackage package,
-        IReadOnlyDictionary<string, XElement> relationships,
+        RowReadingContext context,
         XElement row,
         int rowIndex,
-        DocxXml.TableLocation location,
         string name)
     {
         return new DocumentRecord(
-            path,
-            location.TableIndex,
+            context.Path,
+            context.Location.TableIndex,
             rowIndex,
             name,
             IdentityNormalizer.Normalize(name),
             SerializeElement(row),
-            FindDependencies(row, relationships, package.Parts.Keys));
+            FindDependencies(row, context.Relationships, context.Package.Parts.Keys));
     }
 
     private static RecordDependencies FindDependencies(
@@ -278,7 +271,13 @@ public sealed class DocxDocumentReader : IDocumentReader
         return element.ToString(SaveOptions.DisableFormatting);
     }
 
+    private sealed record RowReadingContext(
+        string Path,
+        DocxPackage Package,
+        DocxXml.TableLocation Location,
+        IReadOnlyDictionary<string, XElement> Relationships);
+
     private sealed record RowResults(
-        IReadOnlyList<DocumentRecord> Records,
-        IReadOnlyList<AuxiliaryRow> AuxiliaryRows);
+        List<DocumentRecord> Records,
+        List<AuxiliaryRow> AuxiliaryRows);
 }

@@ -6,7 +6,7 @@ internal static class PackagePaths
 {
     internal static string Resolve(string basePart, string target)
     {
-        var combined = target.StartsWith("/", StringComparison.Ordinal)
+        var combined = target.StartsWith('/')
             ? target.TrimStart('/')
             : $"{Directory(basePart)}/{target}";
         return Normalize(combined);

@@ -9,28 +9,35 @@ internal sealed class RelationshipImporter
     private readonly DocxPackage _destination;
     private readonly Dictionary<string, string> _partMapping = new(StringComparer.Ordinal);
     private readonly HashSet<string> _usedParts;
+    private readonly CancellationToken _cancellationToken;
 
-    private RelationshipImporter(DocxPackage source, DocxPackage destination)
+    private RelationshipImporter(
+        DocxPackage source,
+        DocxPackage destination,
+        CancellationToken cancellationToken)
     {
         _source = source;
         _destination = destination;
         _usedParts = destination.Parts.Keys.ToHashSet(StringComparer.Ordinal);
+        _cancellationToken = cancellationToken;
     }
 
     internal static RelationshipImportResult Import(
         DocxPackage source,
         DocxPackage destination,
-        IReadOnlyList<XElement> rows)
+        IReadOnlyList<XElement> rows,
+        CancellationToken cancellationToken)
     {
         var sourceDocument = ReadRelationships(source);
         var destinationDocument = ReadRelationships(destination);
         var sourceRelationships = MapRelationships(sourceDocument.Root!);
         var usedIds = MapRelationships(destinationDocument.Root!).Keys
             .ToHashSet(StringComparer.Ordinal);
-        var importer = new RelationshipImporter(source, destination);
+        var importer = new RelationshipImporter(source, destination, cancellationToken);
         var mapping = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var id in CollectRelationshipIds(rows).Order(StringComparer.Ordinal))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ImportRelationship(id, sourceRelationships, destinationDocument.Root!, usedIds, importer, mapping);
         }
 
@@ -67,6 +74,7 @@ internal sealed class RelationshipImporter
 
     private string ImportPart(string sourcePath)
     {
+        _cancellationToken.ThrowIfCancellationRequested();
         if (_partMapping.TryGetValue(sourcePath, out var existing))
         {
             return existing;
@@ -99,6 +107,7 @@ internal sealed class RelationshipImporter
             .Elements(DocxNames.PackageRelationships + "Relationship")
             .Where(relationship => !IsExternal(relationship)))
         {
+            _cancellationToken.ThrowIfCancellationRequested();
             var target = PackagePaths.Resolve(
                 sourcePath, relationship.Attribute("Target")?.Value ?? string.Empty);
             var imported = ImportPart(target);

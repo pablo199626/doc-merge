@@ -5,9 +5,9 @@ using DocMerge.Domain.Transfer;
 
 namespace DocMerge.Infrastructure.Docx;
 
-internal sealed class DocxTransferEditor
+public sealed class DocxTransferEditor : ITransferPlanEditor
 {
-    internal async Task<int> ApplyAsync(
+    public async Task<int> ApplyTransferPlanAsync(
         ApplyTransferPlanRequest request,
         CancellationToken cancellationToken)
     {
@@ -17,28 +17,38 @@ internal sealed class DocxTransferEditor
         VerifyHash(destinationBytes, request.Plan.DestinationHash, "El documento de destino cambió después de crear el plan.");
         var source = DocxPackage.FromBytes(sourceBytes);
         var destination = DocxPackage.FromBytes(destinationBytes);
-        var rows = SourceRows(request.Plan);
-        var mappings = ImportDependencies(source, destination, rows);
-        var count = ApplyActions(destination, request.Plan, mappings, request.Header);
+        var rows = SourceRows(request.Plan, cancellationToken);
+        var mappings = ImportDependencies(source, destination, rows, cancellationToken);
+        var count = ApplyActions(
+            destination, request.Plan, mappings, request.Header, cancellationToken);
         await destination.WriteAsync(request.OutputPath, cancellationToken);
         return count;
     }
 
-    private static IReadOnlyList<XElement> SourceRows(TransferPlan plan)
+    private static IReadOnlyList<XElement> SourceRows(
+        TransferPlan plan,
+        CancellationToken cancellationToken)
     {
-        return plan.Actions
-            .Where(action => action.ActionType is ActionType.Add or ActionType.Replace)
-            .Select(action => XElement.Parse(action.Source!.RowXml, LoadOptions.PreserveWhitespace))
-            .ToArray();
+        var rows = new List<XElement>();
+        foreach (var action in plan.Actions.Where(
+            action => action.ActionType is ActionType.Add or ActionType.Replace))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            rows.Add(XElement.Parse(action.Source!.RowXml, LoadOptions.PreserveWhitespace));
+        }
+
+        return rows;
     }
 
     private static DependencyMappings ImportDependencies(
         DocxPackage source,
         DocxPackage destination,
-        IReadOnlyList<XElement> rows)
+        IReadOnlyList<XElement> rows,
+        CancellationToken cancellationToken)
     {
-        var styles = StyleImporter.Import(source, destination, rows);
-        var numbering = NumberingImporter.Import(source, destination, rows, styles);
+        var styles = StyleImporter.Import(source, destination, rows, cancellationToken);
+        var numbering = NumberingImporter.Import(
+            source, destination, rows, styles, cancellationToken);
         if (styles.Document is not null)
         {
             destination.Parts[DocxNames.StylesPart] = DocxXml.Serialize(styles.Document);
@@ -49,7 +59,7 @@ internal sealed class DocxTransferEditor
             destination.Parts[DocxNames.NumberingPart] = DocxXml.Serialize(numbering.Document);
         }
 
-        var relationships = RelationshipImporter.Import(source, destination, rows);
+        var relationships = RelationshipImporter.Import(source, destination, rows, cancellationToken);
         destination.Parts[DocxNames.RelationshipsPart] = DocxXml.Serialize(relationships.Document);
         return new DependencyMappings(styles.Mapping, numbering.Mapping, relationships.Mapping);
     }
@@ -58,7 +68,8 @@ internal sealed class DocxTransferEditor
         DocxPackage destination,
         TransferPlan plan,
         DependencyMappings mappings,
-        string header)
+        string header,
+        CancellationToken cancellationToken)
     {
         var document = DocxXml.Parse(destination.Parts[DocxNames.DocumentPart]);
         var location = DocxXml.LocateStrictTable(document, header);
@@ -68,7 +79,8 @@ internal sealed class DocxTransferEditor
         var additions = new List<XElement>();
         foreach (var action in plan.Actions)
         {
-            ApplyAction(location.Table, rows, additions, action, mappings);
+            cancellationToken.ThrowIfCancellationRequested();
+            ApplyAction(rows, additions, action, mappings);
         }
 
         location.Table.Add(additions);
@@ -77,7 +89,6 @@ internal sealed class DocxTransferEditor
     }
 
     private static void ApplyAction(
-        XElement table,
         IReadOnlyDictionary<int, XElement> rows,
         ICollection<XElement> additions,
         TransferAction action,

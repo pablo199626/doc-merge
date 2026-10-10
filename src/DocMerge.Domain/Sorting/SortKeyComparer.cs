@@ -1,13 +1,16 @@
 namespace DocMerge.Domain.Sorting;
 
+/// <summary>Compares all components of a <see cref="SortKey"/> in priority order.</summary>
 public sealed class SortKeyComparer : IComparer<SortKey>
 {
+    /// <summary>Gets the shared comparer instance.</summary>
     public static readonly SortKeyComparer Instance = new();
 
     private SortKeyComparer()
     {
     }
 
+    /// <inheritdoc/>
     public int Compare(SortKey? left, SortKey? right)
     {
         if (ReferenceEquals(left, right))
