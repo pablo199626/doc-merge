@@ -870,8 +870,13 @@
                                         BorderThickness="1" CornerRadius="10"
                                         SizeChanged="ReviewTableBorder_SizeChanged">
                                   <Grid x:Name="ReviewTableSurface" Background="{DynamicResource SurfaceBrush}">
+                                    <Border Height="{Binding ColumnHeaderHeight, ElementName=ReviewGrid}"
+                                            VerticalAlignment="Top" IsHitTestVisible="False"
+                                            Background="{DynamicResource SurfaceAltBrush}"
+                                            BorderBrush="{DynamicResource TableSeparatorBrush}"
+                                            BorderThickness="0,0,0,1" />
                                     <DataGrid x:Name="ReviewGrid" ItemsSource="{Binding VisibleStudents}" AutoGenerateColumns="False"
-                                               MinWidth="0" HorizontalAlignment="Stretch"
+                                               MinWidth="0" HorizontalAlignment="Stretch" Background="Transparent"
                                                EnableColumnVirtualization="True"
                                                VirtualizingPanel.IsVirtualizing="True"
                                                VirtualizingPanel.VirtualizationMode="Recycling"
