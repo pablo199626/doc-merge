@@ -11,6 +11,25 @@ public enum InputKind
     Template,
 }
 
+/// <summary>Identifies the presentation state of one generation input.</summary>
+public enum InputSelectionState
+{
+    /// <summary>No path has been selected.</summary>
+    Empty,
+
+    /// <summary>A path is selected but has not been analyzed.</summary>
+    Selected,
+
+    /// <summary>The selected path is being analyzed.</summary>
+    Analyzing,
+
+    /// <summary>The engine validated the selected path.</summary>
+    Validated,
+
+    /// <summary>The input requires user attention.</summary>
+    Error,
+}
+
 /// <summary>Represents the state of one input card.</summary>
 public sealed class InputSelectionViewModel : ViewModelBase
 {
@@ -19,14 +38,14 @@ public sealed class InputSelectionViewModel : ViewModelBase
     private string? _error;
     private int? _count;
     private bool _isBusy;
+    private InputSelectionState _state;
 
     /// <summary>Initializes an input card.</summary>
-    public InputSelectionViewModel(InputKind kind, string title, string description, string icon)
+    public InputSelectionViewModel(InputKind kind, string title, string description)
     {
         Kind = kind;
         Title = title;
         Description = description;
-        Icon = icon;
     }
 
     /// <summary>Gets the input kind.</summary>
@@ -38,9 +57,6 @@ public sealed class InputSelectionViewModel : ViewModelBase
     /// <summary>Gets the supporting description.</summary>
     public string Description { get; }
 
-    /// <summary>Gets the symbolic icon.</summary>
-    public string Icon { get; }
-
     /// <summary>Gets the selected path.</summary>
     public string? Path
     {
@@ -50,6 +66,8 @@ public sealed class InputSelectionViewModel : ViewModelBase
             if (SetProperty(ref _path, value))
             {
                 OnPropertyChanged(nameof(HasSelection));
+                OnPropertyChanged(nameof(DisplayName));
+                OnPropertyChanged(nameof(BrowseActionText));
             }
         }
     }
@@ -94,6 +112,21 @@ public sealed class InputSelectionViewModel : ViewModelBase
     /// <summary>Gets whether validation failed.</summary>
     public bool HasError => !string.IsNullOrWhiteSpace(Error);
 
+    /// <summary>Gets the explicit presentation state.</summary>
+    public InputSelectionState State
+    {
+        get => _state;
+        private set => SetProperty(ref _state, value);
+    }
+
+    /// <summary>Gets the selected file or directory name.</summary>
+    public string DisplayName => Path is null
+        ? string.Empty
+        : GetDisplayName(Path);
+
+    /// <summary>Gets the appropriate browse action label.</summary>
+    public string BrowseActionText => HasSelection ? "Cambiar" : "Examinar…";
+
     /// <summary>Sets a path that passed immediate selection checks.</summary>
     public void Select(string path)
     {
@@ -101,6 +134,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         Status = "Seleccionado · pendiente de analizar";
         Error = null;
         Count = null;
+        State = InputSelectionState.Selected;
     }
 
     /// <summary>Marks this input as being analyzed.</summary>
@@ -110,6 +144,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         Status = "Analizando…";
         Error = null;
         Count = null;
+        State = InputSelectionState.Analyzing;
     }
 
     /// <summary>Marks this input as validated by preparation.</summary>
@@ -118,6 +153,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         IsBusy = false;
         Count = count;
         Status = count.HasValue ? $"Comprobado · {count.Value} archivos" : "Comprobado";
+        State = InputSelectionState.Validated;
     }
 
     /// <summary>Marks this input with an actionable error.</summary>
@@ -126,6 +162,20 @@ public sealed class InputSelectionViewModel : ViewModelBase
         IsBusy = false;
         Error = message;
         Status = "Requiere atención";
+        State = InputSelectionState.Error;
+    }
+
+    /// <summary>Ends an interrupted analysis without losing a valid selection.</summary>
+    public void StopAnalysis()
+    {
+        if (!IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = false;
+        Status = HasSelection ? "Seleccionado · pendiente de analizar" : "Sin seleccionar";
+        State = HasSelection ? InputSelectionState.Selected : InputSelectionState.Empty;
     }
 
     /// <summary>Clears the selection.</summary>
@@ -136,5 +186,13 @@ public sealed class InputSelectionViewModel : ViewModelBase
         Error = null;
         Count = null;
         IsBusy = false;
+        State = InputSelectionState.Empty;
+    }
+
+    private static string GetDisplayName(string path)
+    {
+        var trimmed = path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+        var name = System.IO.Path.GetFileName(trimmed);
+        return string.IsNullOrWhiteSpace(name) ? path : name;
     }
 }

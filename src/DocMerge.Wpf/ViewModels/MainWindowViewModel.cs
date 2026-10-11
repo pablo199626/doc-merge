@@ -13,10 +13,15 @@ namespace DocMerge.Wpf.ViewModels;
 public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private const string StudentHeader = "Nombre y Apellidos";
+    private const double CompactSidebarWidth = 64;
+    private const double ExpandedSidebarWidth = 220;
+    private const double SidebarOverlayThreshold = 900;
+    private const double CompactReviewThreshold = 1160;
     private readonly ClassGenerationService _preparationService;
     private readonly ClassGenerationExecutionService _executionService;
     private readonly IFileDialogService _dialogs;
     private readonly IThemeService _themeService;
+    private readonly IDesktopPreferencesService _preferences;
     private readonly ISystemFolderService _folderService;
     private PreparedClassGeneration? _prepared;
     private CancellationTokenSource? _operationCancellation;
@@ -25,6 +30,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private int _currentStep = 1;
     private bool _isBusy;
     private bool _isDark;
+    private ThemePreference _selectedThemePreference;
+    private bool _isSidebarExpanded;
+    private double _windowWidth = 1280;
     private string? _generalError;
     private string _progressText = string.Empty;
     private ClassReviewViewModel? _selectedClass;
@@ -41,30 +49,32 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         ClassGenerationExecutionService executionService,
         IFileDialogService dialogs,
         IThemeService themeService,
+        IDesktopPreferencesService preferences,
         ISystemFolderService folderService)
     {
         _preparationService = preparationService ?? throw new ArgumentNullException(nameof(preparationService));
         _executionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _folderService = folderService ?? throw new ArgumentNullException(nameof(folderService));
         _isDark = themeService.IsDark;
+        _selectedThemePreference = themeService.Preference;
+        _isSidebarExpanded = preferences.Load().IsSidebarExpanded;
+        themeService.Changed += OnThemeChanged;
 
         HistoricalInput = new InputSelectionViewModel(
             InputKind.HistoricalDocuments,
             "Documentos históricos (DOCX)",
-            "Carpeta con la base histórica global",
-            "📁");
+            "Carpeta con la base histórica global");
         RosterInput = new InputSelectionViewModel(
             InputKind.Rosters,
             "Listados de alumnos (PDF)",
-            "Carpeta con los PDF que determinan las clases",
-            "📁");
+            "Carpeta con los PDF que determinan las clases");
         TemplateInput = new InputSelectionViewModel(
             InputKind.Template,
             "Plantilla (DOCX)",
-            "Documento base para generar cada clase",
-            "▤");
+            "Documento base para generar cada clase");
 
         BrowseInputCommand = new RelayCommand(BrowseInput, _ => !IsBusy);
         RemoveInputCommand = new RelayCommand(RemoveInput, _ => !IsBusy);
@@ -81,7 +91,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         ShowIssueCommand = new RelayCommand(ShowIssue);
         ShowAllIssuesCommand = new RelayCommand(_ => ShowAllIssues(), _ => Issues.Count > 0);
         ShowStudentCommand = new RelayCommand(ShowStudent);
-        ToggleThemeCommand = new RelayCommand(_ => IsDark = !IsDark);
+        SetThemeCommand = new RelayCommand(SetTheme);
+        ToggleSidebarCommand = new RelayCommand(_ => IsSidebarExpanded = !IsSidebarExpanded);
+        CloseSidebarOverlayCommand = new RelayCommand(_ => IsSidebarExpanded = false);
     }
 
     /// <summary>Raised when a temporary read-only detail dialog should be displayed.</summary>
@@ -155,8 +167,22 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the command that shows student detail.</summary>
     public RelayCommand ShowStudentCommand { get; }
 
-    /// <summary>Gets the command that toggles the color theme.</summary>
-    public RelayCommand ToggleThemeCommand { get; }
+    /// <summary>Gets the command that selects a color theme.</summary>
+    public RelayCommand SetThemeCommand { get; }
+
+    /// <summary>Gets the command that expands or collapses the sidebar.</summary>
+    public RelayCommand ToggleSidebarCommand { get; }
+
+    /// <summary>Gets the command that closes an overlaid sidebar.</summary>
+    public RelayCommand CloseSidebarOverlayCommand { get; }
+
+    /// <summary>Gets the available appearance choices.</summary>
+    public IReadOnlyList<ThemeOptionViewModel> ThemeOptions { get; } =
+    [
+        new(ThemePreference.System, "Sistema"),
+        new(ThemePreference.Light, "Claro"),
+        new(ThemePreference.Dark, "Oscuro"),
+    ];
 
     /// <summary>Gets or sets the active workflow step.</summary>
     public int CurrentStep
@@ -174,6 +200,10 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(IsGenerationStep));
             OnPropertyChanged(nameof(StepOneIndicator));
             OnPropertyChanged(nameof(StepTwoIndicator));
+            OnPropertyChanged(nameof(StepThreeIndicator));
+            OnPropertyChanged(nameof(StepOneState));
+            OnPropertyChanged(nameof(StepTwoState));
+            OnPropertyChanged(nameof(StepThreeState));
         }
     }
 
@@ -192,6 +222,29 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the second step number or completion mark.</summary>
     public string StepTwoIndicator => CurrentStep < 3 ? "2" : "✓";
 
+    /// <summary>Gets the third step number or completion mark.</summary>
+    public string StepThreeIndicator => PublishedDirectory is null ? "3" : "✓";
+
+    /// <summary>Gets the visual state of input selection.</summary>
+    public WorkflowStepState StepOneState => CurrentStep == 1
+        ? WorkflowStepState.Current
+        : WorkflowStepState.Completed;
+
+    /// <summary>Gets the visual state of review.</summary>
+    public WorkflowStepState StepTwoState => CurrentStep switch
+    {
+        < 2 => WorkflowStepState.Pending,
+        2 => WorkflowStepState.Current,
+        _ => WorkflowStepState.Completed,
+    };
+
+    /// <summary>Gets the visual state of document generation.</summary>
+    public WorkflowStepState StepThreeState => PublishedDirectory is not null
+        ? WorkflowStepState.Completed
+        : CurrentStep == 3
+            ? WorkflowStepState.Current
+            : WorkflowStepState.Pending;
+
     /// <summary>Gets whether a long operation is active.</summary>
     public bool IsBusy
     {
@@ -205,18 +258,74 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Gets or sets whether the dark theme is active.</summary>
+    /// <summary>Gets whether the effective theme is dark.</summary>
     public bool IsDark
     {
         get => _isDark;
+        private set => SetProperty(ref _isDark, value);
+    }
+
+    /// <summary>Gets or sets the selected color-theme preference.</summary>
+    public ThemePreference SelectedThemePreference
+    {
+        get => _selectedThemePreference;
         set
         {
-            if (SetProperty(ref _isDark, value))
+            if (!SetProperty(ref _selectedThemePreference, value))
             {
-                _themeService.SetDark(value);
+                return;
             }
+
+            _themeService.SetPreference(value);
+            OnPropertyChanged(nameof(ThemeSummary));
+            NotifyThemeSelectionChanged();
         }
     }
+
+    /// <summary>Gets the selected preference and effective system result.</summary>
+    public string ThemeSummary => SelectedThemePreference == ThemePreference.System
+        ? $"Sistema · {(IsDark ? "oscuro" : "claro")}"
+        : ThemeOptions.First(option => option.Value == SelectedThemePreference).Label;
+
+    /// <summary>Gets whether the system theme option is selected.</summary>
+    public bool IsSystemThemeSelected => SelectedThemePreference == ThemePreference.System;
+
+    /// <summary>Gets whether the light theme option is selected.</summary>
+    public bool IsLightThemeSelected => SelectedThemePreference == ThemePreference.Light;
+
+    /// <summary>Gets whether the dark theme option is selected.</summary>
+    public bool IsDarkThemeSelected => SelectedThemePreference == ThemePreference.Dark;
+
+    /// <summary>Gets or sets whether the sidebar is explicitly expanded.</summary>
+    public bool IsSidebarExpanded
+    {
+        get => _isSidebarExpanded;
+        set
+        {
+            if (!SetProperty(ref _isSidebarExpanded, value))
+            {
+                return;
+            }
+
+            _preferences.SetSidebarExpanded(value);
+            NotifyLayoutChanged();
+        }
+    }
+
+    /// <summary>Gets the sidebar's visual width.</summary>
+    public double SidebarWidth => IsSidebarExpanded ? ExpandedSidebarWidth : CompactSidebarWidth;
+
+    /// <summary>Gets the width reserved by the shell layout.</summary>
+    public double SidebarColumnWidth => IsSidebarOverlayMode ? CompactSidebarWidth : SidebarWidth;
+
+    /// <summary>Gets whether the sidebar is overlaid instead of consuming its expanded width.</summary>
+    public bool IsSidebarOverlayMode => _windowWidth < SidebarOverlayThreshold;
+
+    /// <summary>Gets whether the sidebar currently blocks the compact content area.</summary>
+    public bool IsSidebarOverlayVisible => IsSidebarExpanded && IsSidebarOverlayMode;
+
+    /// <summary>Gets whether review uses its vertically stacked class selector.</summary>
+    public bool IsCompactReviewLayout => _windowWidth - SidebarColumnWidth < CompactReviewThreshold;
 
     /// <summary>Gets the current general error.</summary>
     public string? GeneralError
@@ -285,6 +394,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public string VisibleStudentSummary => SelectedClass is null
         ? "Sin clase seleccionada"
         : $"Mostrando {VisibleStudents.Count} de {SelectedClass.StudentCount} alumnos";
+
+    /// <summary>Gets whether the active filters contain at least one student.</summary>
+    public bool HasVisibleStudents => VisibleStudents.Count > 0;
 
     /// <summary>Gets the complete batch summary.</summary>
     public string BatchSummary => _prepared is null
@@ -363,6 +475,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             if (SetProperty(ref _publishedDirectory, value))
             {
                 OpenOutputCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(StepThreeIndicator));
+                OnPropertyChanged(nameof(StepThreeState));
             }
         }
     }
@@ -389,6 +503,27 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Shows an inline drag-and-drop error without discarding an existing selection.</summary>
+    public void RejectDroppedPath(InputKind kind, string message)
+    {
+        if (!IsBusy)
+        {
+            SetSelectionError(GetInput(kind), message);
+        }
+    }
+
+    /// <summary>Updates adaptive presentation state from the current window width.</summary>
+    public void UpdateWindowWidth(double width)
+    {
+        if (Math.Abs(_windowWidth - width) < 0.5)
+        {
+            return;
+        }
+
+        _windowWidth = width;
+        NotifyLayoutChanged();
+    }
+
     /// <summary>Requests cancellation and returns a task that completes when the active operation finishes.</summary>
     public void CancelOperation()
     {
@@ -399,6 +534,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        _themeService.Changed -= OnThemeChanged;
         _operationCancellation?.Cancel();
         _operationCancellation?.Dispose();
         _operationCancellation = null;
@@ -426,7 +562,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         var error = ValidateImmediate(kind, path);
         if (error is not null)
         {
-            input.SetError(error);
+            SetSelectionError(input, error);
             return;
         }
 
@@ -490,6 +626,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         }
         finally
         {
+            StopInputAnalysis();
             _operationCancellation.Dispose();
             _operationCancellation = null;
             _operationSequence++;
@@ -617,6 +754,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         VisibleStudents.Clear();
         if (SelectedClass is null)
         {
+            OnPropertyChanged(nameof(VisibleStudentSummary));
+            OnPropertyChanged(nameof(HasVisibleStudents));
             return;
         }
 
@@ -628,6 +767,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         OnPropertyChanged(nameof(VisibleStudentSummary));
+        OnPropertyChanged(nameof(HasVisibleStudents));
     }
 
     private static bool MatchesSearch(StudentReviewViewModel student, string search) =>
@@ -755,6 +895,55 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                 input.Select(input.Path!);
             }
         }
+    }
+
+    private void StopInputAnalysis()
+    {
+        foreach (var input in Inputs())
+        {
+            input.StopAnalysis();
+        }
+    }
+
+    private void SetSelectionError(InputSelectionViewModel input, string message)
+    {
+        var detail = input.HasSelection
+            ? $"{message} Se conserva la selección anterior."
+            : message;
+        input.SetError(detail);
+    }
+
+    private void SetTheme(object? parameter)
+    {
+        if (parameter is ThemePreference preference)
+        {
+            SelectedThemePreference = preference;
+        }
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        _selectedThemePreference = _themeService.Preference;
+        OnPropertyChanged(nameof(SelectedThemePreference));
+        IsDark = _themeService.IsDark;
+        OnPropertyChanged(nameof(ThemeSummary));
+        NotifyThemeSelectionChanged();
+    }
+
+    private void NotifyLayoutChanged()
+    {
+        OnPropertyChanged(nameof(SidebarWidth));
+        OnPropertyChanged(nameof(SidebarColumnWidth));
+        OnPropertyChanged(nameof(IsSidebarOverlayMode));
+        OnPropertyChanged(nameof(IsSidebarOverlayVisible));
+        OnPropertyChanged(nameof(IsCompactReviewLayout));
+    }
+
+    private void NotifyThemeSelectionChanged()
+    {
+        OnPropertyChanged(nameof(IsSystemThemeSelected));
+        OnPropertyChanged(nameof(IsLightThemeSelected));
+        OnPropertyChanged(nameof(IsDarkThemeSelected));
     }
 
     private void SetInputError(GenerationInputException error)

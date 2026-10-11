@@ -62,8 +62,16 @@ La presentación usa controles y temas Fluent de WPF UI 4.3.0, manteniendo en
 recursos propios únicamente los colores semánticos y la identidad visual.
 La revisión visual validada presenta tarjetas compactas para las entradas, una
 lista de clases y una tabla virtualizada con búsqueda, filtro y etiquetas de
-estado. El tema debe conservar el acento `#0866F5` y contraste legible tanto al
-iniciar como al cambiar dinámicamente entre claro y oscuro.
+estado. En ancho compacto, la lista de clases se sustituye por un selector y el
+`DataGrid` conserva su scroll propio, sin ocultar las acciones de la pantalla.
+
+El shell incorpora un stepper conectado y un sidebar persistente: 64 DIP
+colapsado y 220 DIP expandido. En ventanas estrechas, la expansión se superpone
+sobre el contenido sin reescribir la preferencia guardada. Apariencia permite
+elegir directamente Sistema, Claro u Oscuro. Sistema sigue el tema de
+aplicaciones de Windows; una elección `light`/`dark` del antiguo `theme.txt` se
+migra sin perderla. El tema conserva el acento `#0866F5` y actualiza WPF UI y los
+recursos semánticos mediante un único servicio.
 
 La salida se elige después de revisar. La ejecución conserva el objeto
 `PreparedClassGeneration` revisado y no crea silenciosamente un plan diferente.
@@ -177,8 +185,13 @@ Bloquean la publicación los problemas estructurales, incluidos:
 - La versión sigue siendo `2.1.0`; no la incrementes sin autorización expresa.
 - La entrega WPF validada está en `release-desktop/DocMerge.exe`; la entrega de
   consola permanece separada e intacta en `release/DocMerge.exe`.
-- Queda pendiente completar manualmente la matriz de teclado/foco, arrastrar y
-  soltar, 1366×768, DPI 125–200 % y generación integral desde la propia WPF.
+- Se validaron visualmente selección a 1366×768 y revisión amplia y compacta con
+  el corpus real. Una ejecución integral mediante la composición WPF publicó y
+  validó los cuatro documentos esperados sin modificar las entradas.
+- Queda pendiente completar manualmente la matriz exhaustiva de teclado/foco,
+  arrastrar y soltar y DPI 125–200 %. La generación integral comprobada fue
+  programática sobre la composición WPF, no una automatización de los diálogos
+  nativos.
 
 ## Corpus local validado
 
@@ -207,3 +220,8 @@ C:\Program Files\dotnet\dotnet.exe test DocMerge.sln --no-restore
 Si se entrega ejecutable, publica para `win-x64`, prueba `--version`, simulación,
 generación real y la opción 3 del asistente sin argumentos. Comprueba los hashes
 de las entradas privadas antes y después.
+
+La verificación del 11 de octubre de 2026 superó 114 pruebas (21 WPF), build sin
+avisos y formato limpio. `release-desktop/DocMerge.exe` conserva versión
+`2.1.0.0`/`2.1.0`, tamaño 152.639.291 bytes y SHA-256
+`58bbdc51669b940a1f08929c8e730805fd1b904c7c1d04cef6a9ca242b610429`.

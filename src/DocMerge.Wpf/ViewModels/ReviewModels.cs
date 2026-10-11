@@ -32,6 +32,9 @@ public sealed record StudentReviewViewModel(
     /// <summary>Gets the readable historical resolution.</summary>
     public string Status => StudentReviewText.Status(Plan.Resolution.ResolutionType);
 
+    /// <summary>Gets the typed historical resolution for presentation styling.</summary>
+    public HistoricalResolutionType ResolutionType => Plan.Resolution.ResolutionType;
+
     /// <summary>Gets the historical source or a safe empty indicator.</summary>
     public string Source => Plan.Resolution.SelectedCandidate is null
         ? "—"

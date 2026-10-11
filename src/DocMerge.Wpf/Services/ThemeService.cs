@@ -1,18 +1,29 @@
-using System.Diagnostics;
-using System.IO;
-using System.Windows;
-using System.Windows.Media;
-using Wpf.Ui.Appearance;
-
 namespace DocMerge.Wpf.Services;
 
 /// <summary>Applies centralized WPF theme dictionaries and stores one non-sensitive preference.</summary>
-public sealed class ThemeService : IThemeService
+public sealed class ThemeService : IThemeService, IDisposable
 {
-    private const string ThemeFileName = "theme.txt";
-    private static readonly Color BrandAccent = Color.FromRgb(0x08, 0x66, 0xF5);
-    private static readonly Uri LightTheme = new("Resources/LightTheme.xaml", UriKind.Relative);
-    private static readonly Uri DarkTheme = new("Resources/DarkTheme.xaml", UriKind.Relative);
+    private readonly IDesktopPreferencesService _preferences;
+    private readonly ISystemThemeService _systemTheme;
+    private readonly IThemeApplicator _themeApplicator;
+    private bool _isSubscribed;
+
+    /// <summary>Initializes centralized theme coordination.</summary>
+    public ThemeService(
+        IDesktopPreferencesService preferences,
+        ISystemThemeService systemTheme,
+        IThemeApplicator themeApplicator)
+    {
+        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _systemTheme = systemTheme ?? throw new ArgumentNullException(nameof(systemTheme));
+        _themeApplicator = themeApplicator ?? throw new ArgumentNullException(nameof(themeApplicator));
+    }
+
+    /// <inheritdoc />
+    public event EventHandler? Changed;
+
+    /// <inheritdoc />
+    public ThemePreference Preference { get; private set; } = ThemePreference.System;
 
     /// <inheritdoc />
     public bool IsDark { get; private set; }
@@ -20,61 +31,78 @@ public sealed class ThemeService : IThemeService
     /// <inheritdoc />
     public void ApplySavedTheme()
     {
-        try
+        Preference = _preferences.Load().ThemePreference;
+        if (!_isSubscribed)
         {
-            SetTheme(File.Exists(SettingsPath)
-                && string.Equals(File.ReadAllText(SettingsPath).Trim(), "dark", StringComparison.Ordinal));
+            _systemTheme.Changed += OnSystemThemeChanged;
+            _isSubscribed = true;
         }
-        catch (IOException)
-        {
-            Debug.WriteLine("No se pudo leer la preferencia de tema; se usará el tema claro.");
-            SetTheme(isDark: false);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            Debug.WriteLine("No hay permisos para leer la preferencia de tema; se usará el tema claro.");
-            SetTheme(isDark: false);
-        }
+
+        ApplyEffectiveTheme();
     }
 
     /// <inheritdoc />
-    public void SetDark(bool isDark)
+    public void SetPreference(ThemePreference preference)
     {
-        SetTheme(isDark);
-        try
+        if (!Enum.IsDefined(preference))
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-            File.WriteAllText(SettingsPath, isDark ? "dark" : "light");
+            throw new ArgumentOutOfRangeException(nameof(preference));
         }
-        catch (IOException)
+
+        if (Preference == preference)
         {
-            Debug.WriteLine("No se pudo guardar la preferencia de tema.");
+            return;
         }
-        catch (UnauthorizedAccessException)
-        {
-            Debug.WriteLine("No hay permisos para guardar la preferencia de tema.");
-        }
+
+        Preference = preference;
+        _preferences.SetThemePreference(preference);
+        ApplyEffectiveTheme();
     }
 
-    private static string SettingsPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "DocMerge",
-        ThemeFileName);
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (!_isSubscribed)
+        {
+            return;
+        }
+
+        _systemTheme.Changed -= OnSystemThemeChanged;
+        _isSubscribed = false;
+    }
+
+    private void OnSystemThemeChanged(object? sender, EventArgs e)
+    {
+        if (Preference != ThemePreference.System)
+        {
+            return;
+        }
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(ApplyEffectiveTheme);
+            return;
+        }
+
+        ApplyEffectiveTheme();
+    }
+
+    private void ApplyEffectiveTheme()
+    {
+        SetTheme(Preference switch
+        {
+            ThemePreference.Dark => true,
+            ThemePreference.Light => false,
+            ThemePreference.System => _systemTheme.IsDark,
+            _ => false,
+        });
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     private void SetTheme(bool isDark)
     {
         IsDark = isDark;
-        var applicationTheme = isDark ? ApplicationTheme.Dark : ApplicationTheme.Light;
-        ApplicationThemeManager.Apply(applicationTheme, updateAccent: false);
-        ApplicationAccentColorManager.Apply(BrandAccent, applicationTheme);
-        var dictionaries = System.Windows.Application.Current.Resources.MergedDictionaries;
-        var current = dictionaries.FirstOrDefault(item =>
-            item.Source?.OriginalString.EndsWith("Theme.xaml", StringComparison.Ordinal) == true);
-        if (current is not null)
-        {
-            dictionaries.Remove(current);
-        }
-
-        dictionaries.Add(new ResourceDictionary { Source = isDark ? DarkTheme : LightTheme });
+        _themeApplicator.Apply(isDark);
     }
 }

@@ -42,6 +42,72 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(1, viewModel.SelectedClass!.StudentCount);
     }
 
+    [Fact]
+    public async Task AppearanceChanges_PreparedReview_RemainsAvailable()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        var summary = viewModel.BatchSummary;
+
+        viewModel.SetThemeCommand.Execute(ThemePreference.Dark);
+        viewModel.ToggleSidebarCommand.Execute(parameter: null);
+
+        Assert.True(viewModel.IsReviewStep);
+        Assert.Equal(summary, viewModel.BatchSummary);
+        Assert.Equal(ThemePreference.Dark, viewModel.SelectedThemePreference);
+        Assert.True(viewModel.IsSidebarExpanded);
+    }
+
+    [Fact]
+    public void UpdateWindowWidth_CompactOverlay_PreservesExplicitSidebarPreference()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        viewModel.IsSidebarExpanded = true;
+
+        viewModel.UpdateWindowWidth(800);
+
+        Assert.True(viewModel.IsSidebarExpanded);
+        Assert.True(viewModel.IsSidebarOverlayMode);
+        Assert.True(viewModel.IsSidebarOverlayVisible);
+        Assert.Equal(64, viewModel.SidebarColumnWidth);
+    }
+
+    [Fact]
+    public void SelectDroppedPath_RejectedReplacement_KeepsPreviousSelection()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        var originalPath = viewModel.TemplateInput.Path;
+
+        viewModel.SelectDroppedPath(InputKind.Template, fixture.HistoricalDirectory);
+
+        Assert.Equal(originalPath, viewModel.TemplateInput.Path);
+        Assert.True(viewModel.TemplateInput.HasError);
+        Assert.Contains("conserva la selección anterior", viewModel.TemplateInput.Error);
+    }
+
+    [Fact]
+    public async Task AnalyzeCommand_InputFailure_ClearsAnalyzingStateFromEveryCard()
+    {
+        using var fixture = new ViewModelFixture { FailRosterRead = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+
+        Assert.All(
+            new[] { viewModel.HistoricalInput, viewModel.RosterInput, viewModel.TemplateInput },
+            input => Assert.False(input.IsBusy));
+        Assert.DoesNotContain(
+            new[] { viewModel.HistoricalInput, viewModel.RosterInput, viewModel.TemplateInput },
+            input => input.State == InputSelectionState.Analyzing);
+        Assert.Equal(InputSelectionState.Error, viewModel.RosterInput.State);
+    }
+
     private sealed class ViewModelFixture : IDisposable
     {
         private readonly string _root = Path.Combine(
@@ -56,7 +122,9 @@ public sealed class MainWindowViewModelTests
             File.WriteAllText(RosterPath, "roster");
         }
 
-        private string HistoricalDirectory => Path.Combine(_root, "history");
+        internal bool FailRosterRead { get; init; }
+
+        internal string HistoricalDirectory => Path.Combine(_root, "history");
         private string RosterDirectory => Path.Combine(_root, "rosters");
         private string TemplatePath => Path.Combine(_root, "template.docx");
         private string HistoricalPath => Path.Combine(HistoricalDirectory, "history.docx");
@@ -68,7 +136,7 @@ public sealed class MainWindowViewModelTests
             var discovery = new StubDiscovery(inputs);
             var preparation = new ClassGenerationService(
                 discovery,
-                new StubRosterReader(RosterPath),
+                new StubRosterReader(RosterPath, FailRosterRead),
                 new StubTemplateReader(TemplatePath),
                 new StubHistoricalReader(HistoricalPath),
                 new ClassGenerationPlanner(new HistoricalStudentResolver()));
@@ -83,6 +151,7 @@ public sealed class MainWindowViewModelTests
                 execution,
                 new StubDialogs(),
                 new StubTheme(),
+                new StubPreferences(),
                 new StubFolderService());
         }
 
@@ -104,10 +173,15 @@ public sealed class MainWindowViewModelTests
                 CancellationToken cancellationToken) => Task.FromResult(inputs);
         }
 
-        private sealed class StubRosterReader(string path) : IClassRosterReader
+        private sealed class StubRosterReader(string path, bool fail) : IClassRosterReader
         {
             public Task<ClassRoster> ReadAsync(string ignored, CancellationToken cancellationToken)
             {
+                if (fail)
+                {
+                    throw new IOException("Roster read failed.");
+                }
+
                 var entry = new ClassRosterEntry(
                     "ALUMNO, UNO", "alumno, uno", "alumno uno", "12345678", 1, 1);
                 return Task.FromResult(new ClassRoster(
@@ -183,11 +257,32 @@ public sealed class MainWindowViewModelTests
 
         private sealed class StubTheme : IThemeService
         {
+            public event EventHandler? Changed;
+            public ThemePreference Preference { get; private set; }
             public bool IsDark { get; private set; }
             public void ApplySavedTheme()
             {
             }
-            public void SetDark(bool isDark) => IsDark = isDark;
+
+            public void SetPreference(ThemePreference preference)
+            {
+                Preference = preference;
+                IsDark = preference == ThemePreference.Dark;
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        private sealed class StubPreferences : IDesktopPreferencesService
+        {
+            private DesktopPreferences _preferences = DesktopPreferences.Default;
+
+            public DesktopPreferences Load() => _preferences;
+
+            public void SetThemePreference(ThemePreference preference) =>
+                _preferences = _preferences with { ThemePreference = preference };
+
+            public void SetSidebarExpanded(bool isExpanded) =>
+                _preferences = _preferences with { IsSidebarExpanded = isExpanded };
         }
 
         private sealed class StubFolderService : ISystemFolderService

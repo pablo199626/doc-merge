@@ -45,6 +45,24 @@
       "source": "github/awesome-copilot",
       "sourceType": "autoskills-registry",
       "computedHash": "77925fe0898ceeab04c574390815e7500a2426a26036a357325ce751f23cce71"
+    },
+    "mvvm-toolkit": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/mvvm-toolkit/SKILL.md",
+      "computedHash": "4e6340eb4f540a7c47d571faaf73bd2b8ad8e040bd607edc38db82186358bdc5"
+    },
+    "mvvm-toolkit-di": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/mvvm-toolkit-di/SKILL.md",
+      "computedHash": "03d4ba593107178559ac03bac176bf9dcb66bd3d9bb3cc865e69a4997308acbf"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "computedHash": "7ac62d931e52dbc7c309ed8ee067101969db2454709339b02daa583e80e98d5f"
     }
   }
 }

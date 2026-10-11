@@ -25,17 +25,18 @@
 ## Estado actual tras la generación de clases
 
 - El 11 de octubre de 2026 se añadió y validó el flujo de generación de clases, manteniendo intactas las operaciones certificadas de ordenación y transferencia.
-- La suite C# actual tiene **97 pruebas superadas**: Domain 40, Application 8, Infrastructure 35, Console 10 y WPF 4.
+- La suite C# actual tiene **114 pruebas superadas**: Domain 40, Application 8, Infrastructure 35, Console 10 y WPF 21.
 - El corpus local de la nueva funcionalidad contiene 7 Word históricos (74 registros), 4 PDF de segundo curso (94 asignaciones) y la plantilla `ANEXO_TEMPLATE.docx`. La simulación validada obtiene 22 recuperaciones únicas, 70 ausencias históricas y 2 asignaciones ambiguas del homónimo `BENALI, OMAR` con NIA distintos.
 - Los cuatro documentos reales `2A.docx`, `2B.docx`, `2C.docx` y `2D.docx` se generaron y validaron desde el ejecutable publicado. Contienen respectivamente 24, 22, 25 y 23 alumnos.
 - La entrega actual `release/DocMerge.exe` conserva versión de archivo `2.1.0.0` y versión de producto `2.1.0`; tiene tamaño de 79.810.864 bytes y SHA-256 `61b42c2d63b791f631d0e6b4e13186a54cde865c9e36e38b862f754df9fcc2d5`.
 - El asistente sin argumentos ofrece ahora tres operaciones: transferencia, ordenación y generación de clases. La opción 3 solicita carpeta de históricos, carpeta de PDF, plantilla, carpeta nueva de salida y si se desea simular.
 - La arquitectura, los contratos y las instrucciones de mantenimiento del flujo nuevo se documentan en `docs/class-generation.md`.
-- La primera interfaz WPF implementa los tres pasos de selección, revisión de solo lectura y generación, con temas claro/oscuro, cancelación, referencias estructuradas de incidencias y detección de planes obsoletos.
+- La interfaz WPF implementa los tres pasos de selección, revisión de solo lectura y generación, con preferencia Sistema/Claro/Oscuro, cancelación, referencias estructuradas de incidencias y detección de planes obsoletos. La preferencia Sistema sigue el tema de aplicaciones de Windows; las preferencias visuales se guardan localmente sin rutas ni datos del plan.
 - El 11 de octubre de 2026 se rediseñó visualmente la revisión WPF conforme a las referencias locales de `assets/UX/`: tarjetas compactas, lista de clases, tabla con anchos estables, filtros y estados semánticos. Se validó con el corpus real en temas claro y oscuro, obteniendo 4 clases, 94 alumnos y 76 incidencias sin alterar el plan funcional.
 - La capa WPF usa `WPF-UI` `4.3.0` para controles y temas Fluent. El acento de marca se fija en `#0866F5`; los colores semánticos y ajustes específicos de `DataGrid` permanecen en `src/DocMerge.Wpf/Resources/`. No dupliques plantillas completas de la biblioteca cuando baste un estilo o recurso propio.
-- La entrega WPF está separada en `release-desktop/DocMerge.exe`; conserva versión de archivo `2.1.0.0` y versión de producto `2.1.0`, tiene tamaño de 152.614.715 bytes y SHA-256 `3f84468d146fbc2ce7e44c322a52d866137b07ae410cf3b1d78dae43bd78b5ff`.
-- Queda pendiente una validación manual final de teclado/foco, arrastrar y soltar, resolución 1366×768, escalado DPI 125–200 % y una generación completa iniciada desde la WPF. Las capturas de `assets/UX/` son referencias locales actualmente no versionadas: no las elimines, empaquetes ni añadas a Git sin una decisión explícita.
+- El 11 de octubre de 2026 se refinó el shell WPF con stepper conectado, tarjetas de entrada con estados explícitos, revisión adaptable, sidebar persistente de 64/220 DIP y selector directo de apariencia. La revisión compacta sustituye la lista lateral por un selector sin modificar el lote ni los filtros.
+- La entrega WPF está separada en `release-desktop/DocMerge.exe`; conserva versión de archivo `2.1.0.0` y versión de producto `2.1.0`, tiene tamaño de 152.639.291 bytes y SHA-256 `58bbdc51669b940a1f08929c8e730805fd1b904c7c1d04cef6a9ca242b610429`.
+- Se verificaron el arranque publicado, los temas claro y oscuro, el sidebar colapsado y expandido, selección a 1366×768, revisión real amplia y compacta, y una generación integral mediante la composición WPF: 4 clases, 94 alumnos, 76 incidencias y documentos de 24/22/25/23 alumnos sin alterar entradas. Queda pendiente la validación manual exhaustiva de teclado/foco, arrastrar y soltar y escalado DPI 125–200 %. Las capturas de `assets/UX/` son referencias locales actualmente no versionadas: no las elimines, empaquetes ni añadas a Git sin una decisión explícita.
 
 ## Estructura de la solución
 

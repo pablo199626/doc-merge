@@ -3,6 +3,7 @@
     <SolidColorBrush x:Key="WindowBrush" Color="#F4F7FC" />
     <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="SurfaceAltBrush" Color="#F7F9FD" />
+    <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#EFF4FC" />
     <SolidColorBrush x:Key="TextBrush" Color="#101A45" />
     <SolidColorBrush x:Key="MutedTextBrush" Color="#60709B" />
     <SolidColorBrush x:Key="BorderBrush" Color="#D8E2F3" />
@@ -15,4 +16,7 @@
     <SolidColorBrush x:Key="ErrorBrush" Color="#C93636" />
     <SolidColorBrush x:Key="ErrorSoftBrush" Color="#FDE8E8" />
     <SolidColorBrush x:Key="DisabledBrush" Color="#AAB4C8" />
+    <SolidColorBrush x:Key="TemplateAccentBrush" Color="#7C3AED" />
+    <SolidColorBrush x:Key="TemplateAccentSoftBrush" Color="#F0E8FF" />
+    <SolidColorBrush x:Key="OverlayBrush" Color="#520B1220" />
 </ResourceDictionary>

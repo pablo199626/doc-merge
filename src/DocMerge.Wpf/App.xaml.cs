@@ -54,6 +54,9 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ClassGenerationService>();
         services.AddSingleton<ClassGenerationExecutionService>();
         services.AddSingleton<IFileDialogService, FileDialogService>();
+        services.AddSingleton<IDesktopPreferencesService, DesktopPreferencesService>();
+        services.AddSingleton<ISystemThemeService, WindowsSystemThemeService>();
+        services.AddSingleton<IThemeApplicator, WpfThemeApplicator>();
         services.AddSingleton<IThemeService, ThemeService>();
         services.AddSingleton<ISystemFolderService, SystemFolderService>();
         services.AddSingleton<MainWindowViewModel>();

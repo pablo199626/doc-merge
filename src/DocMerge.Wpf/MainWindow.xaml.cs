@@ -1,5 +1,8 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using DocMerge.Wpf.ViewModels;
 
 namespace DocMerge.Wpf;
@@ -59,33 +62,89 @@ public partial class MainWindow : Window
 
     private void InputCard_DragEnter(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+        var canDrop = e.Data.GetDataPresent(DataFormats.FileDrop)
+            && e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 };
+        e.Effects = canDrop
             ? DragDropEffects.Copy
             : DragDropEffects.None;
+        if (sender is Border border && canDrop)
+        {
+            border.BorderBrush = (Brush)FindResource("AccentBrush");
+            border.BorderThickness = new Thickness(2);
+        }
+
+        e.Handled = true;
+    }
+
+    private void InputCard_DragLeave(object sender, DragEventArgs e)
+    {
+        ResetDropHighlight(sender);
         e.Handled = true;
     }
 
     private void InputCard_Drop(object sender, DragEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: InputSelectionViewModel input }
-            || e.Data.GetData(DataFormats.FileDrop) is not string[] paths
-            || paths.Length != 1)
+        ResetDropHighlight(sender);
+        if (sender is not FrameworkElement { DataContext: InputSelectionViewModel input })
         {
-            MessageBox.Show(
-                this,
-                "Arrastra una sola carpeta o archivo sobre la tarjeta correspondiente.",
-                "Selección no válida",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            return;
+        }
+
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } paths)
+        {
+            _viewModel.RejectDroppedPath(
+                input.Kind,
+                "Arrastra una sola carpeta o archivo sobre esta tarjeta.");
+            e.Handled = true;
             return;
         }
 
         _viewModel.SelectDroppedPath(input.Kind, paths[0]);
+        e.Handled = true;
+    }
+
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e) =>
+        _viewModel.UpdateWindowWidth(e.NewSize.Width);
+
+    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || !_viewModel.IsSidebarOverlayVisible)
+        {
+            return;
+        }
+
+        _viewModel.CloseSidebarOverlayCommand.Execute(parameter: null);
+        SidebarToggleButton.Focus();
+        e.Handled = true;
+    }
+
+    private void SidebarOverlay_Click(object sender, RoutedEventArgs e) => SidebarToggleButton.Focus();
+
+    private void ThemeMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { ContextMenu: { } menu } button)
+        {
+            return;
+        }
+
+        menu.PlacementTarget = button;
+        menu.IsOpen = true;
     }
 
     private void ShowDetail(object? sender, DetailRequestedEventArgs e)
     {
         var dialog = new DetailWindow(e.Title, e.Body) { Owner = this };
         dialog.ShowDialog();
+    }
+
+    private void ResetDropHighlight(object sender)
+    {
+        if (sender is not Border border)
+        {
+            return;
+        }
+
+        border.ClearValue(Border.BorderBrushProperty);
+        border.ClearValue(Border.BorderThicknessProperty);
     }
 }

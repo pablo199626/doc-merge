@@ -1,185 +1,468 @@
 <Window x:Class="DocMerge.Wpf.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:automation="clr-namespace:System.Windows.Automation;assembly=PresentationCore"
+        xmlns:domain="clr-namespace:DocMerge.Domain.Generation;assembly=DocMerge.Domain"
+        xmlns:services="clr-namespace:DocMerge.Wpf.Services"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:vm="clr-namespace:DocMerge.Wpf.ViewModels"
         Title="DocMerge — Generación de clases"
-        Width="1280" Height="820" MinWidth="640" MinHeight="520"
-        WindowStartupLocation="CenterScreen">
+        Width="1366" Height="820" MinWidth="720" MinHeight="560"
+        WindowStartupLocation="CenterScreen"
+        SizeChanged="MainWindow_SizeChanged"
+        PreviewKeyDown="MainWindow_PreviewKeyDown">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
+
+        <Style x:Key="SidebarLabel" TargetType="FrameworkElement">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSidebarExpanded}" Value="False">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="StepTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="Margin" Value="0,7,0,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+        </Style>
+
+        <DataTemplate x:Key="CompactInputCardTemplate" DataType="{x:Type vm:InputSelectionViewModel}">
+            <Border Style="{StaticResource Card}" Margin="5" Padding="11">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="38" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="34" Height="34" CornerRadius="9"
+                            Background="{DynamicResource AccentSoftBrush}">
+                        <ui:SymbolIcon x:Name="CompactInputIcon" Symbol="Folder24" FontSize="20"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="NoWrap" />
+                        <TextBlock Text="{Binding Path}" Style="{StaticResource MutedText}"
+                                   FontSize="10" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Path}" />
+                        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SuccessBrush}"
+                                   FontSize="10" TextWrapping="NoWrap" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:InputKind.Template}">
+                    <Setter TargetName="CompactInputIcon" Property="ui:SymbolIcon.Symbol" Value="Document24" />
+                    <Setter TargetName="CompactInputIcon" Property="Foreground" Value="{DynamicResource TemplateAccentBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <DataTemplate x:Key="InputCardTemplate" DataType="{x:Type vm:InputSelectionViewModel}">
-            <Border Style="{StaticResource Card}"
-                    Margin="6" MinWidth="260"
+            <Border Style="{StaticResource InputCard}"
+                    Margin="6" MinWidth="250"
                     AllowDrop="True"
                     DragEnter="InputCard_DragEnter"
+                    DragLeave="InputCard_DragLeave"
                     Drop="InputCard_Drop">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="48" Height="48" CornerRadius="12"
-                                Background="{DynamicResource AccentSoftBrush}">
-                            <TextBlock Text="{Binding Icon}" FontSize="24"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="52" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource IconTile}">
+                            <ui:SymbolIcon x:Name="InputKindIcon" Symbol="Folder28" FontSize="28"
+                                           Foreground="{DynamicResource AccentBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
-                        <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="16" />
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="15" />
                             <TextBlock Text="{Binding Description}" Style="{StaticResource MutedText}"
-                                       FontSize="12" />
+                                       FontSize="12" Margin="0,2,0,0" />
                         </StackPanel>
-                    </StackPanel>
-                    <Border Grid.Row="1" Margin="0,15,0,12" Padding="12" MinHeight="105"
+                    </Grid>
+
+                    <Border Grid.Row="1" Margin="0,15,0,12" Padding="14" MinHeight="126"
                             Background="{DynamicResource SurfaceAltBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="1" CornerRadius="8">
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Arrastra aquí o usa Examinar" HorizontalAlignment="Center"
-                                       Style="{StaticResource MutedText}" />
-                            <TextBlock Text="{Binding Path}" Margin="0,8,0,0" TextAlignment="Center"
-                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
-                            <TextBlock Text="{Binding Status}" Margin="0,6,0,0" TextAlignment="Center"
-                                       Foreground="{DynamicResource SuccessBrush}" />
-                            <TextBlock Text="{Binding Error}" Margin="0,6,0,0" TextAlignment="Center"
-                                       Foreground="{DynamicResource ErrorBrush}"
-                                       Visibility="{Binding HasError, Converter={StaticResource BooleanVisibility}}" />
-                        </StackPanel>
+                            BorderThickness="1" CornerRadius="9">
+                        <Grid>
+                            <StackPanel x:Name="EmptyInputPanel" VerticalAlignment="Center">
+                                <ui:SymbolIcon x:Name="EmptyInputIcon" Symbol="Folder28" FontSize="32"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               HorizontalAlignment="Center" />
+                                <TextBlock Text="Arrastra aquí la carpeta o el archivo"
+                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                           FontWeight="SemiBold" Margin="0,9,0,0" />
+                                <TextBlock Text="También puedes seleccionarlo desde el explorador"
+                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                           Style="{StaticResource MutedText}" FontSize="11" Margin="0,3,0,0" />
+                            </StackPanel>
+
+                            <Grid x:Name="SelectedInputPanel">
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding State}" Value="{x:Static vm:InputSelectionState.Empty}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="34" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon x:Name="InputStateIcon" Symbol="CheckmarkCircle24" FontSize="24"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               VerticalAlignment="Top" Margin="0,2,0,0" />
+                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="14"
+                                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding DisplayName}" />
+                                    <TextBlock Text="{Binding Path}" Style="{StaticResource MutedText}"
+                                               FontSize="11" Margin="0,3,0,0" TextWrapping="NoWrap"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <TextBlock x:Name="InputStatusText" Text="{Binding Status}"
+                                                   Foreground="{DynamicResource AccentBrush}" FontSize="11"
+                                                   FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <ProgressBar Width="62" Height="4" Margin="10,0,0,0"
+                                                     IsIndeterminate="True"
+                                                     Visibility="{Binding IsBusy, Converter={StaticResource BooleanVisibility}}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Error}" Margin="0,6,0,0"
+                                               Foreground="{DynamicResource ErrorBrush}" FontSize="11"
+                                               Visibility="{Binding HasError, Converter={StaticResource BooleanVisibility}}"
+                                               automation:AutomationProperties.LiveSetting="Assertive" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
                     </Border>
+
                     <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Button Content="Examinar…" Command="{Binding DataContext.BrowseInputCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                CommandParameter="{Binding}" />
-                        <Button Grid.Column="1" Content="Quitar" Margin="8,0,0,0"
+                        <Button Content="{Binding BrowseActionText}"
+                                Command="{Binding DataContext.BrowseInputCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}" MinHeight="40" />
+                        <Button Grid.Column="1" Content="Quitar" Margin="8,0,0,0" MinHeight="40"
                                 Command="{Binding DataContext.RemoveInputCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                CommandParameter="{Binding}" />
+                                CommandParameter="{Binding}"
+                                Visibility="{Binding HasSelection, Converter={StaticResource BooleanVisibility}}" />
                     </Grid>
                 </Grid>
             </Border>
-        </DataTemplate>
-        <DataTemplate x:Key="CompactInputCardTemplate" DataType="{x:Type vm:InputSelectionViewModel}">
-            <Border Style="{StaticResource Card}" Margin="6" Padding="12">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="42" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Border Width="38" Height="38" CornerRadius="10"
-                            Background="{DynamicResource AccentSoftBrush}">
-                        <TextBlock Text="{Binding Icon}" FontSize="18"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" />
-                        <TextBlock Text="{Binding Path}" Style="{StaticResource MutedText}"
-                                   FontSize="11" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding Path}" />
-                        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SuccessBrush}"
-                                   FontSize="11" />
-                    </StackPanel>
-                </Grid>
-            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:InputKind.Template}">
+                    <Setter TargetName="InputKindIcon" Property="ui:SymbolIcon.Symbol" Value="Document28" />
+                    <Setter TargetName="InputKindIcon" Property="Foreground" Value="{DynamicResource TemplateAccentBrush}" />
+                    <Setter TargetName="EmptyInputIcon" Property="ui:SymbolIcon.Symbol" Value="Document24" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="{x:Static vm:InputSelectionState.Empty}">
+                    <Setter TargetName="EmptyInputPanel" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="{x:Static vm:InputSelectionState.Selected}">
+                    <Setter TargetName="EmptyInputPanel" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="InputStateIcon" Property="ui:SymbolIcon.Symbol" Value="Info24" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="{x:Static vm:InputSelectionState.Analyzing}">
+                    <Setter TargetName="EmptyInputPanel" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="InputStateIcon" Property="ui:SymbolIcon.Symbol" Value="Search24" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="{x:Static vm:InputSelectionState.Validated}">
+                    <Setter TargetName="EmptyInputPanel" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="InputStateIcon" Property="ui:SymbolIcon.Symbol" Value="CheckmarkCircle24" />
+                    <Setter TargetName="InputStateIcon" Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                    <Setter TargetName="InputStatusText" Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="{x:Static vm:InputSelectionState.Error}">
+                    <Setter TargetName="EmptyInputPanel" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="InputStateIcon" Property="ui:SymbolIcon.Symbol" Value="ErrorCircle24" />
+                    <Setter TargetName="InputStateIcon" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                    <Setter TargetName="InputStatusText" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
     </Window.Resources>
 
     <Grid Background="{DynamicResource WindowBrush}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="{Binding SidebarColumnWidth}" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="0,0,1,0" Padding="20">
+        <Button Grid.Column="1" Panel.ZIndex="8"
+                Background="{DynamicResource OverlayBrush}" BorderThickness="0"
+                Command="{Binding CloseSidebarOverlayCommand}"
+                Click="SidebarOverlay_Click"
+                Visibility="{Binding IsSidebarOverlayVisible, Converter={StaticResource BooleanVisibility}}"
+                automation:AutomationProperties.Name="Cerrar menú lateral" />
+
+        <Border Grid.Column="0" Panel.ZIndex="10" Width="{Binding SidebarWidth}"
+                HorizontalAlignment="Left"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
+                Padding="10">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <StackPanel Orientation="Horizontal">
-                    <Border Width="42" Height="42" CornerRadius="10" Background="{DynamicResource AccentBrush}">
-                        <TextBlock Text="▤" Foreground="White" FontSize="23"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                <Grid Height="48" ToolTip="{Binding Version, StringFormat=DocMerge v{0}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="44" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="42" Height="42" CornerRadius="11" Background="{DynamicResource AccentBrush}">
+                        <ui:SymbolIcon Symbol="DocumentText24" FontSize="24" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
-                    <StackPanel Margin="10,0,0,0">
-                        <TextBlock Text="DocMerge" FontSize="21" FontWeight="Bold" />
-                        <TextBlock Text="Generación de clases" FontSize="11" Style="{StaticResource MutedText}" />
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"
+                                Style="{StaticResource SidebarLabel}">
+                        <TextBlock Text="DocMerge" FontSize="20" FontWeight="Bold" TextWrapping="NoWrap" />
+                        <TextBlock Text="Generación de clases" FontSize="10" Style="{StaticResource MutedText}"
+                                   TextWrapping="NoWrap" />
                     </StackPanel>
-                </StackPanel>
-                <Border Grid.Row="1" Margin="0,34,0,0" Padding="12" CornerRadius="8"
-                        Background="{DynamicResource AccentSoftBrush}">
-                    <TextBlock Text="⌂  Generación de clases" Foreground="{DynamicResource AccentBrush}"
-                               FontWeight="SemiBold" />
-                </Border>
-                <StackPanel Grid.Row="3">
-                    <CheckBox Content="Modo oscuro" IsChecked="{Binding IsDark}" Margin="2,0,0,18" />
-                    <TextBlock Text="{Binding Version, StringFormat=DocMerge v{0}}" Style="{StaticResource MutedText}" />
-                </StackPanel>
+                </Grid>
+
+                <Button x:Name="SidebarToggleButton" Grid.Row="1" Margin="0,12,0,4" Style="{StaticResource SidebarActionButton}"
+                        Command="{Binding ToggleSidebarCommand}"
+                        ToolTip="Expandir o contraer menú"
+                        automation:AutomationProperties.Name="Expandir o contraer menú">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="22" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ui:SymbolIcon Symbol="PanelLeftExpand20" FontSize="20" />
+                        <TextBlock Grid.Column="1" Text="Contraer menú" Margin="10,0,0,0"
+                                   VerticalAlignment="Center" TextWrapping="NoWrap"
+                                   Style="{StaticResource SidebarLabel}" />
+                    </Grid>
+                </Button>
+
+                <Button Grid.Row="2" Margin="0,10,0,0" Style="{StaticResource SidebarActiveButton}"
+                        ToolTip="Generación de clases"
+                        automation:AutomationProperties.Name="Generación de clases, sección activa">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="22" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ui:SymbolIcon Symbol="Home20" FontSize="20" />
+                        <TextBlock Grid.Column="1" Text="Generación de clases" Margin="10,0,0,0"
+                                   VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="NoWrap"
+                                   Style="{StaticResource SidebarLabel}" />
+                    </Grid>
+                </Button>
+
+                <Button x:Name="ThemeMenuButton" Grid.Row="4" Margin="0,0,0,8"
+                        Style="{StaticResource SidebarActionButton}"
+                        Click="ThemeMenuButton_Click" ToolTip="Cambiar apariencia"
+                        automation:AutomationProperties.Name="Cambiar apariencia">
+                    <Button.ContextMenu>
+                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                            <MenuItem Header="Sistema" Command="{Binding SetThemeCommand}" IsCheckable="True"
+                                      IsChecked="{Binding IsSystemThemeSelected, Mode=OneWay}"
+                                      CommandParameter="{x:Static services:ThemePreference.System}">
+                                <MenuItem.Icon><ui:SymbolIcon Symbol="Desktop20" /></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Claro" Command="{Binding SetThemeCommand}" IsCheckable="True"
+                                      IsChecked="{Binding IsLightThemeSelected, Mode=OneWay}"
+                                      CommandParameter="{x:Static services:ThemePreference.Light}">
+                                <MenuItem.Icon><ui:SymbolIcon Symbol="WeatherSunny20" /></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Oscuro" Command="{Binding SetThemeCommand}" IsCheckable="True"
+                                      IsChecked="{Binding IsDarkThemeSelected, Mode=OneWay}"
+                                      CommandParameter="{x:Static services:ThemePreference.Dark}">
+                                <MenuItem.Icon><ui:SymbolIcon Symbol="WeatherMoon20" /></MenuItem.Icon>
+                            </MenuItem>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="22" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <ui:SymbolIcon Symbol="Desktop20" FontSize="20" />
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0" Style="{StaticResource SidebarLabel}">
+                            <TextBlock Text="Apariencia" FontWeight="SemiBold" TextWrapping="NoWrap" />
+                            <TextBlock Text="{Binding ThemeSummary}" Style="{StaticResource MutedText}"
+                                       FontSize="10" TextWrapping="NoWrap" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <TextBlock Grid.Row="5" Text="{Binding Version, StringFormat=DocMerge v{0}}"
+                           Style="{StaticResource SidebarLabel}" FontSize="11"
+                           Foreground="{DynamicResource MutedTextBrush}" Margin="2,4,0,2" />
             </Grid>
         </Border>
 
-        <Grid Grid.Column="1" Margin="26,18,26,20">
+        <Grid Grid.Column="1" Margin="24,18,24,18">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Grid Margin="15,0,15,18">
+            <Grid Margin="14,0,14,18">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal">
-                    <Border Width="34" Height="34" CornerRadius="17">
+
+                <StackPanel>
+                    <Border HorizontalAlignment="Center">
                         <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                            <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentStep}" Value="1"><Setter Property="Background" Value="{DynamicResource AccentBrush}" /></DataTrigger>
-                                    <DataTrigger Binding="{Binding CurrentStep}" Value="2"><Setter Property="Background" Value="{DynamicResource SuccessBrush}" /></DataTrigger>
-                                    <DataTrigger Binding="{Binding CurrentStep}" Value="3"><Setter Property="Background" Value="{DynamicResource SuccessBrush}" /></DataTrigger>
+                                    <DataTrigger Binding="{Binding StepOneState}" Value="{x:Static vm:WorkflowStepState.Current}">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding StepOneState}" Value="{x:Static vm:WorkflowStepState.Completed}">
+                                        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <TextBlock Text="{Binding StepOneIndicator}" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding StepOneIndicator}" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding StepOneState}" Value="{x:Static vm:WorkflowStepState.Current}">
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </Border>
-                    <TextBlock Text="Seleccionar archivos" Margin="9,0" VerticalAlignment="Center" FontWeight="SemiBold" />
+                    <TextBlock Text="Seleccionar archivos" Style="{StaticResource StepTitle}" FontWeight="SemiBold" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Border Width="34" Height="34" CornerRadius="17">
+
+                <Border Grid.Column="1" Height="2" Margin="14,17,14,0" VerticalAlignment="Top">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StepOneState}" Value="{x:Static vm:WorkflowStepState.Completed}">
+                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+
+                <StackPanel Grid.Column="2">
+                    <Border HorizontalAlignment="Center">
                         <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                            <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentStep}" Value="2"><Setter Property="Background" Value="{DynamicResource AccentBrush}" /></DataTrigger>
-                                    <DataTrigger Binding="{Binding CurrentStep}" Value="3"><Setter Property="Background" Value="{DynamicResource SuccessBrush}" /></DataTrigger>
+                                    <DataTrigger Binding="{Binding StepTwoState}" Value="{x:Static vm:WorkflowStepState.Current}">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding StepTwoState}" Value="{x:Static vm:WorkflowStepState.Completed}">
+                                        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <TextBlock Text="{Binding StepTwoIndicator}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding StepTwoIndicator}" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                    <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding StepTwoState}" Value="{x:Static vm:WorkflowStepState.Current}">
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding StepTwoState}" Value="{x:Static vm:WorkflowStepState.Completed}">
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </Border>
-                    <TextBlock Text="Revisar información" Margin="9,0" VerticalAlignment="Center" FontWeight="SemiBold" />
+                    <TextBlock Text="Revisar información" Style="{StaticResource StepTitle}" FontWeight="SemiBold" />
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <Border Width="34" Height="34" CornerRadius="17">
+
+                <Border Grid.Column="3" Height="2" Margin="14,17,14,0" VerticalAlignment="Top">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding StepTwoState}" Value="{x:Static vm:WorkflowStepState.Completed}">
+                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+
+                <StackPanel Grid.Column="4">
+                    <Border HorizontalAlignment="Center">
                         <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                            <Style TargetType="Border" BasedOn="{StaticResource StepCircle}">
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentStep}" Value="3"><Setter Property="Background" Value="{DynamicResource AccentBrush}" /></DataTrigger>
+                                    <DataTrigger Binding="{Binding StepThreeState}" Value="{x:Static vm:WorkflowStepState.Current}">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding StepThreeState}" Value="{x:Static vm:WorkflowStepState.Completed}">
+                                        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <TextBlock Text="3" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding StepThreeIndicator}" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                    <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding StepThreeState}" Value="{x:Static vm:WorkflowStepState.Current}">
+                                            <Setter Property="Foreground" Value="White" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding StepThreeState}" Value="{x:Static vm:WorkflowStepState.Completed}">
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </Border>
-                    <TextBlock Text="Generar documentos" Margin="9,0" VerticalAlignment="Center" FontWeight="SemiBold" />
+                    <TextBlock Text="Generar documentos" Style="{StaticResource StepTitle}" FontWeight="SemiBold" />
                 </StackPanel>
             </Grid>
 
@@ -187,27 +470,44 @@
                 <Grid Visibility="{Binding IsSelectionStep, Converter={StaticResource BooleanVisibility}}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <StackPanel Margin="6,0,6,15">
                         <TextBlock Text="Selecciona los archivos de entrada" Style="{StaticResource Heading}" />
-                        <TextBlock Text="Los históricos son la base global; los PDF determinan la pertenencia a cada clase."
+                        <TextBlock Text="Carga las tres fuentes necesarias. Los PDF determinan la pertenencia a cada clase."
                                    Style="{StaticResource MutedText}" Margin="0,3,0,0" />
                     </StackPanel>
-                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                        <Grid>
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <Grid MinWidth="780">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" MinWidth="260" />
-                                <ColumnDefinition Width="*" MinWidth="260" />
-                                <ColumnDefinition Width="*" MinWidth="260" />
+                                <ColumnDefinition Width="*" MinWidth="250" />
+                                <ColumnDefinition Width="*" MinWidth="250" />
+                                <ColumnDefinition Width="*" MinWidth="250" />
                             </Grid.ColumnDefinitions>
                             <ContentControl Content="{Binding HistoricalInput}" ContentTemplate="{StaticResource InputCardTemplate}" />
                             <ContentControl Grid.Column="1" Content="{Binding RosterInput}" ContentTemplate="{StaticResource InputCardTemplate}" />
                             <ContentControl Grid.Column="2" Content="{Binding TemplateInput}" ContentTemplate="{StaticResource InputCardTemplate}" />
                         </Grid>
                     </ScrollViewer>
-                    <Grid Grid.Row="2" Margin="6,14,6,0">
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="6,10,6,0" Padding="14"
+                            Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Top">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="36" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ui:SymbolIcon Symbol="Info24" FontSize="24" Foreground="{DynamicResource AccentBrush}" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="La revisión aparecerá después de analizar las tres entradas."
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="La selección y el análisis no modifican ningún documento."
+                                           Style="{StaticResource MutedText}" FontSize="12" Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="3" Margin="6,14,6,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
@@ -215,11 +515,11 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel>
                             <TextBlock Text="{Binding GeneralError}" Foreground="{DynamicResource ErrorBrush}"
-                                       Visibility="{Binding HasGeneralError, Converter={StaticResource BooleanVisibility}}" />
+                                       Visibility="{Binding HasGeneralError, Converter={StaticResource BooleanVisibility}}"
+                                       automation:AutomationProperties.LiveSetting="Assertive" />
                             <TextBlock Text="{Binding ProgressText}" Style="{StaticResource MutedText}" />
                         </StackPanel>
-                        <Button Grid.Column="1" Content="Cancelar" Margin="8,0"
-                                Command="{Binding CancelCommand}" />
+                        <Button Grid.Column="1" Content="Cancelar" Margin="8,0" Command="{Binding CancelCommand}" />
                         <ui:Button Grid.Column="2" Content="Analizar y continuar" Appearance="Primary"
                                    Command="{Binding AnalyzeCommand}" />
                     </Grid>
@@ -231,22 +531,30 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <Grid Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+
+                    <UniformGrid Columns="3" Margin="0,0,0,10">
                         <ContentControl Content="{Binding HistoricalInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
-                        <ContentControl Grid.Column="1" Content="{Binding RosterInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
-                        <ContentControl Grid.Column="2" Content="{Binding TemplateInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
-                    </Grid>
+                        <ContentControl Content="{Binding RosterInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
+                        <ContentControl Content="{Binding TemplateInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
+                    </UniformGrid>
+
                     <Grid Grid.Row="1">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="330" />
+                            <ColumnDefinition Width="310" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource Card}" Margin="6">
+
+                        <Border x:Name="ClassListPanel" Margin="5">
+                            <Border.Style>
+                                <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -259,14 +567,17 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Clases detectadas" Style="{StaticResource SectionHeading}" />
-                                    <Border Grid.Column="1" Background="{DynamicResource AccentSoftBrush}"
-                                            CornerRadius="12" Padding="9,3">
+                                    <Border Grid.Column="1" Style="{StaticResource Pill}"
+                                            Background="{DynamicResource AccentSoftBrush}">
                                         <TextBlock Text="{Binding Classes.Count}" Foreground="{DynamicResource AccentBrush}"
                                                    FontWeight="SemiBold" />
                                     </Border>
                                 </Grid>
                                 <ListBox Grid.Row="1" ItemsSource="{Binding Classes}" SelectedItem="{Binding SelectedClass}"
-                                         BorderThickness="0" Background="Transparent" Margin="0,12">
+                                         BorderThickness="0" Background="Transparent" Margin="0,12"
+                                         ScrollViewer.CanContentScroll="True"
+                                         VirtualizingStackPanel.IsVirtualizing="True"
+                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                     <ListBox.ItemContainerStyle>
                                         <Style TargetType="ListBoxItem">
                                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -277,7 +588,7 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="ListBoxItem">
-                                                        <Border x:Name="ItemBorder" Padding="12" CornerRadius="10"
+                                                        <Border x:Name="ItemBorder" Padding="11" CornerRadius="10"
                                                                 Background="{TemplateBinding Background}"
                                                                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                                                             <ContentPresenter />
@@ -288,7 +599,11 @@
                                                                 <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                                                             </Trigger>
                                                             <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                                                 <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                                                <Setter TargetName="ItemBorder" Property="BorderThickness" Value="2" />
                                                             </Trigger>
                                                         </ControlTemplate.Triggers>
                                                     </ControlTemplate>
@@ -300,23 +615,29 @@
                                         <DataTemplate>
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="44" />
+                                                    <ColumnDefinition Width="42" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <Border Width="38" Height="38" CornerRadius="9"
+                                                <Border Width="36" Height="36" CornerRadius="9"
                                                         Background="{DynamicResource AccentSoftBrush}">
-                                                    <TextBlock Text="▤" Foreground="{DynamicResource AccentBrush}"
-                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    <ui:SymbolIcon Symbol="DocumentText20" FontSize="20"
+                                                                   Foreground="{DynamicResource AccentBrush}" />
                                                 </Border>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Code}" FontSize="17" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{Binding StudentCount, StringFormat={}{0} alumnos}" Style="{StaticResource MutedText}" />
+                                                    <TextBlock Text="{Binding Code}" FontSize="16" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding StudentCount, StringFormat={}{0} alumnos}"
+                                                               Style="{StaticResource MutedText}" FontSize="12" />
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                                    <Border Background="{DynamicResource WarningSoftBrush}" CornerRadius="10" Padding="8,2">
-                                                        <TextBlock Text="{Binding WarningCount, StringFormat=⚠ {0}}"
-                                                                   Foreground="{DynamicResource WarningBrush}" FontSize="11" />
+                                                    <Border Style="{StaticResource Pill}" Padding="8,3"
+                                                            Background="{DynamicResource WarningSoftBrush}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <ui:SymbolIcon Symbol="Warning16" FontSize="14"
+                                                                           Foreground="{DynamicResource WarningBrush}" />
+                                                            <TextBlock Text="{Binding WarningCount}" Margin="4,0,0,0"
+                                                                       Foreground="{DynamicResource WarningBrush}" FontSize="11" />
+                                                        </StackPanel>
                                                     </Border>
                                                     <TextBlock Text="{Binding BlockingCount, StringFormat=Bloqueos: {0}}"
                                                                Foreground="{DynamicResource ErrorBrush}" FontSize="10"
@@ -332,99 +653,186 @@
                                 </Border>
                             </Grid>
                         </Border>
-                        <Border Grid.Column="1" Style="{StaticResource Card}" Margin="6">
+
+                        <Border Margin="5">
+                            <Border.Style>
+                                <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                                    <Setter Property="Grid.Column" Value="1" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                            <Setter Property="Grid.Column" Value="0" />
+                                            <Setter Property="Grid.ColumnSpan" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <Grid>
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <Grid>
+
+                                <ComboBox Grid.Row="0" ItemsSource="{Binding Classes}" SelectedItem="{Binding SelectedClass}"
+                                          DisplayMemberPath="Code" Margin="0,0,0,12" MinHeight="40"
+                                          automation:AutomationProperties.Name="Clase revisada">
+                                    <ComboBox.Style>
+                                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ComboBox.Style>
+                                </ComboBox>
+
+                                <WrapPanel Grid.Row="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SelectedClass.Code, StringFormat=Alumnos de {0}}"
+                                               Style="{StaticResource SectionHeading}" Margin="0,0,12,6" />
+                                    <Border Style="{StaticResource Pill}" Background="{DynamicResource SuccessSoftBrush}" Margin="0,0,8,6">
+                                        <StackPanel Orientation="Horizontal">
+                                            <ui:SymbolIcon Symbol="CheckmarkCircle16" FontSize="14" Foreground="{DynamicResource SuccessBrush}" />
+                                            <TextBlock Text="{Binding SelectedClass.RecoveredCount, StringFormat={}{0} recuperados}"
+                                                       Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="4,0,0,0" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource Pill}" Background="{DynamicResource WarningSoftBrush}" Margin="0,0,8,6">
+                                        <StackPanel Orientation="Horizontal">
+                                            <ui:SymbolIcon Symbol="Warning16" FontSize="14" Foreground="{DynamicResource WarningBrush}" />
+                                            <TextBlock Text="{Binding SelectedClass.MissingCount, StringFormat={}{0} sin histórico}"
+                                                       Foreground="{DynamicResource WarningBrush}" FontSize="11" Margin="4,0,0,0" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource Pill}" Background="{DynamicResource ErrorSoftBrush}" Margin="0,0,0,6">
+                                        <StackPanel Orientation="Horizontal">
+                                            <ui:SymbolIcon Symbol="ErrorCircle16" FontSize="14" Foreground="{DynamicResource ErrorBrush}" />
+                                            <TextBlock Text="{Binding SelectedClass.UnresolvedCount, StringFormat={}{0} conflictos}"
+                                                       Foreground="{DynamicResource ErrorBrush}" FontSize="11" Margin="4,0,0,0" />
+                                        </StackPanel>
+                                    </Border>
+                                </WrapPanel>
+
+                                <Grid Grid.Row="2" Margin="0,8,0,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding SelectedClass.Code, StringFormat=Alumnos de {0}}" Style="{StaticResource SectionHeading}" />
-                                    <Border Grid.Column="1" Background="{DynamicResource SuccessSoftBrush}" CornerRadius="12" Padding="10,4" Margin="6,0">
-                                        <TextBlock Text="{Binding SelectedClass.RecoveredCount, StringFormat=✓ {0} recuperados}"
-                                                   Foreground="{DynamicResource SuccessBrush}" FontSize="11" />
-                                    </Border>
-                                    <Border Grid.Column="2" Background="{DynamicResource WarningSoftBrush}" CornerRadius="12" Padding="10,4" Margin="6,0">
-                                        <TextBlock Text="{Binding SelectedClass.MissingCount, StringFormat=⚠ {0} sin histórico}"
-                                                   Foreground="{DynamicResource WarningBrush}" FontSize="11" />
-                                    </Border>
-                                    <Border Grid.Column="3" Background="{DynamicResource ErrorSoftBrush}" CornerRadius="12" Padding="10,4" Margin="6,0">
-                                        <TextBlock Text="{Binding SelectedClass.UnresolvedCount, StringFormat=! {0} conflictos}"
-                                                   Foreground="{DynamicResource ErrorBrush}" FontSize="11" />
-                                    </Border>
-                                </Grid>
-                                <Grid Grid.Row="1" Margin="0,14,0,12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="230" />
+                                        <ColumnDefinition Width="220" />
                                     </Grid.ColumnDefinitions>
                                     <ui:TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                                                PlaceholderText="Buscar alumno o NIA…" />
+                                                PlaceholderText="Buscar alumno o NIA…"
+                                                automation:AutomationProperties.Name="Buscar alumno o NIA" />
                                     <ComboBox Grid.Column="1" Margin="10,0,0,0" ItemsSource="{Binding StatusFilters}"
-                                              SelectedItem="{Binding SelectedFilter}" />
+                                              SelectedItem="{Binding SelectedFilter}"
+                                              automation:AutomationProperties.Name="Filtrar por estado" />
                                 </Grid>
-                                <DataGrid Grid.Row="2" ItemsSource="{Binding VisibleStudents}" AutoGenerateColumns="False"
-                                          MinWidth="0" HorizontalAlignment="Stretch">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="#" Binding="{Binding Ordinal}" Width="48" />
-                                        <DataGridTextColumn Header="Nombre y apellidos" Binding="{Binding Name}" Width="2.2*" MinWidth="240" />
-                                        <DataGridTextColumn Header="NIA" Binding="{Binding StudentNumber}" Width="110" />
-                                        <DataGridTemplateColumn Header="Estado" Width="1.5*" MinWidth="190">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <Border x:Name="StatusBadge" HorizontalAlignment="Left"
-                                                            VerticalAlignment="Center"
-                                                            Background="{DynamicResource SuccessSoftBrush}" CornerRadius="12" Padding="9,4">
-                                                        <TextBlock x:Name="StatusText" Text="{Binding Status}"
-                                                                   Foreground="{DynamicResource SuccessBrush}" FontSize="11" />
-                                                    </Border>
-                                                    <DataTemplate.Triggers>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Recuperado · históricos equivalentes">
-                                                            <Setter TargetName="StatusBadge" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
-                                                            <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource WarningBrush}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Sin histórico">
-                                                            <Setter TargetName="StatusBadge" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
-                                                            <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource WarningBrush}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Conflicto histórico">
-                                                            <Setter TargetName="StatusBadge" Property="Background" Value="{DynamicResource ErrorSoftBrush}" />
-                                                            <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Identidad ambigua">
-                                                            <Setter TargetName="StatusBadge" Property="Background" Value="{DynamicResource ErrorSoftBrush}" />
-                                                            <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
-                                                        </DataTrigger>
-                                                    </DataTemplate.Triggers>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                        <DataGridTextColumn Header="Procedencia" Binding="{Binding Source}" Width="*" MinWidth="150" />
-                                        <DataGridTemplateColumn Header="Detalle" Width="115">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <Button Content="Ver detalle" Padding="10,4"
-                                                            Command="{Binding DataContext.ShowStudentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}" />
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                                <TextBlock Grid.Row="3" Text="{Binding VisibleStudentSummary}" Margin="0,8,0,0"
+
+                                <Grid Grid.Row="3">
+                                    <DataGrid ItemsSource="{Binding VisibleStudents}" AutoGenerateColumns="False"
+                                              MinWidth="0" HorizontalAlignment="Stretch"
+                                              EnableColumnVirtualization="True"
+                                              VirtualizingPanel.IsVirtualizing="True"
+                                              VirtualizingPanel.VirtualizationMode="Recycling">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="#" Binding="{Binding Ordinal}" Width="46"
+                                                                ElementStyle="{StaticResource DataGridTextElement}" />
+                                            <DataGridTextColumn Header="Nombre y apellidos" Binding="{Binding Name}" Width="2.2*" MinWidth="230"
+                                                                ElementStyle="{StaticResource DataGridTextElement}" />
+                                            <DataGridTextColumn Header="NIA" Binding="{Binding StudentNumber}" Width="105"
+                                                                ElementStyle="{StaticResource DataGridTextElement}" />
+                                            <DataGridTemplateColumn Header="Estado" Width="1.5*" MinWidth="190">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Border x:Name="StatusBadge" HorizontalAlignment="Left"
+                                                                Style="{StaticResource Pill}"
+                                                                Background="{DynamicResource SuccessSoftBrush}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <ui:SymbolIcon x:Name="StatusIcon" Symbol="CheckmarkCircle16" FontSize="14"
+                                                                               Foreground="{DynamicResource SuccessBrush}" />
+                                                                <TextBlock x:Name="StatusText" Text="{Binding Status}" Margin="4,0,0,0"
+                                                                           Foreground="{DynamicResource SuccessBrush}" FontSize="12"
+                                                                           TextWrapping="NoWrap" />
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <DataTemplate.Triggers>
+                                                            <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.EquivalentMatches}">
+                                                                <Setter TargetName="StatusBadge" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+                                                                <Setter TargetName="StatusIcon" Property="ui:SymbolIcon.Symbol" Value="Info16" />
+                                                                <Setter TargetName="StatusIcon" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                                                <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.MissingHistoricalStudent}">
+                                                                <Setter TargetName="StatusBadge" Property="Background" Value="{DynamicResource WarningSoftBrush}" />
+                                                                <Setter TargetName="StatusIcon" Property="ui:SymbolIcon.Symbol" Value="Warning16" />
+                                                                <Setter TargetName="StatusIcon" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                                                <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource WarningBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.ConflictingHistoricalData}">
+                                                                <Setter TargetName="StatusBadge" Property="Background" Value="{DynamicResource ErrorSoftBrush}" />
+                                                                <Setter TargetName="StatusIcon" Property="ui:SymbolIcon.Symbol" Value="ErrorCircle16" />
+                                                                <Setter TargetName="StatusIcon" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                                                                <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.AmbiguousStudentIdentity}">
+                                                                <Setter TargetName="StatusBadge" Property="Background" Value="{DynamicResource ErrorSoftBrush}" />
+                                                                <Setter TargetName="StatusIcon" Property="ui:SymbolIcon.Symbol" Value="ErrorCircle16" />
+                                                                <Setter TargetName="StatusIcon" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                                                                <Setter TargetName="StatusText" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                                                            </DataTrigger>
+                                                        </DataTemplate.Triggers>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="Procedencia" Width="*" MinWidth="145">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Source}" Style="{StaticResource DataGridTextElement}"
+                                                                   ToolTip="{Binding Source}" />
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="Detalle" Width="110">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Button Content="Ver detalle" Padding="9,4" MinHeight="30"
+                                                                Command="{Binding DataContext.ShowStudentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}" />
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="18"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasVisibleStudents}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel HorizontalAlignment="Center">
+                                            <ui:SymbolIcon Symbol="SearchInfo24" FontSize="28"
+                                                           Foreground="{DynamicResource MutedTextBrush}" />
+                                            <TextBlock Text="No hay alumnos que coincidan con los filtros."
+                                                       FontWeight="SemiBold" Margin="0,8,0,0" />
+                                            <TextBlock Text="Cambia la búsqueda o selecciona otro estado."
+                                                       Style="{StaticResource MutedText}" FontSize="12" Margin="0,3,0,0" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Grid.Row="4" Text="{Binding VisibleStudentSummary}" Margin="0,8,0,0"
                                            Style="{StaticResource MutedText}" />
                             </Grid>
                         </Border>
                     </Grid>
-                    <Grid Grid.Row="2" Margin="6,12,6,0">
+
+                    <Grid Grid.Row="2" Margin="5,12,5,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -477,7 +885,8 @@
                                     <TextBlock Text="Los avisos no bloqueantes se conservarán. Los filtros de revisión no modifican este lote."
                                                Margin="0,7,0,0" Style="{StaticResource MutedText}" />
                                     <TextBlock Text="{Binding ProgressText}" Margin="0,14,0,0" />
-                                    <TextBlock Text="{Binding FinalStatus}" Margin="0,10,0,0" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding FinalStatus}" Margin="0,10,0,0" FontWeight="SemiBold"
+                                               automation:AutomationProperties.LiveSetting="Polite" />
                                     <Button Content="Abrir carpeta de salida" Margin="0,12,0,0" HorizontalAlignment="Left"
                                             Command="{Binding OpenOutputCommand}" />
                                 </StackPanel>
