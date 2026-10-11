@@ -4,8 +4,8 @@
 
 - La migración de la aplicación de consola Python a C# sobre .NET 10 está completada y validada. La implementación C# es la implementación principal y la única que debe evolucionar salvo autorización expresa.
 - La implementación Python es un **oráculo histórico de comportamiento** para regresiones y paridad; no es la implementación activa ni debe recibir funcionalidades nuevas.
-- Más adelante se añadirá una interfaz gráfica de escritorio para Windows (WPF con MVVM). Por eso el núcleo debe ser independiente de cualquier interfaz: ninguna clase de dominio, aplicación o infraestructura puede usar `Console.*`, `MessageBox` ni tipos de UI.
-- `Console.*` solo se permite en el proyecto `DocMerge.Console`. La futura UI WPF consumirá exactamente los mismos casos de uso.
+- La interfaz gráfica de escritorio para Windows se desarrolla en `DocMerge.Wpf` con WPF y MVVM. El núcleo debe ser independiente de cualquier interfaz: ninguna clase de dominio, aplicación o infraestructura puede usar `Console.*`, `MessageBox` ni tipos de UI.
+- `Console.*` solo se permite en el proyecto `DocMerge.Console`. Los puntos de entrada `DocMerge.Console` y `DocMerge.Wpf` tienen raíces de composición independientes y consumen los mismos casos de uso; ninguno referencia al otro.
 - Prioridad de mantenimiento: conserva los contratos observables y separa las correcciones funcionales de los refactors. No reintroduzcas diferencias frente al comportamiento ya certificado sin una decisión explícita y pruebas de regresión.
 - La referencia Python se conserva sin modificar en `legacy/python/`. `legacy/python/reference.sha256` es el manifiesto histórico de sus 27 archivos. Ejecútala desde una copia temporal cuando necesite el documento real local del que depende una prueba. No copies documentos reales dentro de `legacy/` ni los incluyas en Git o en distribuciones. No regeneres el manifiesto ni normalices el contenido archivado sin una investigación y autorización expresas.
 - Los módulos `identity`, `sorting`, `pdf_reader`, `docx_processor`, `matching`, `validation`, `transfer` y `cli` ya están portados. Todo cambio posterior debe mantener las pruebas de paridad aplicables y pasar la verificación completa.
@@ -39,7 +39,7 @@ DocMerge.sln
 │   ├── DocMerge.Application     (casos de uso, plan de acciones, transferencia, validación, interfaces)
 │   ├── DocMerge.Infrastructure  (lectura PDF, lectura/escritura DOCX, sistema de archivos)
 │   ├── DocMerge.Console         (CLI, asistente de doble clic, composición de dependencias)
-│   └── DocMerge.Wpf             (futuro; no crear hasta que se pida)
+│   └── DocMerge.Wpf             (interfaz de escritorio Windows con WPF y MVVM)
 └── tests/
     ├── DocMerge.Domain.Tests
     ├── DocMerge.Application.Tests
@@ -61,6 +61,8 @@ Equivalencia entre módulos Python y su destino en C#:
 | `docx_processor.py` | `DocMerge.Infrastructure` (lectura y modificación del DOCX) |
 
 Las dependencias apuntan hacia el dominio: `Console` → `Application` → `Domain`, e `Infrastructure` → `Application`/`Domain` (implementa sus interfaces). El dominio no referencia ningún otro proyecto ni librerías externas.
+
+`Wpf` es un segundo punto de entrada y puede depender de `Application` e `Infrastructure`, pero no de `Console`. Diálogos, portapapeles, apertura de archivos, foco, desplazamiento y dibujo pertenecen a `Wpf`. El estado y los comandos siguen MVVM; se admite código de vista exclusivamente para comportamiento visual sin reglas de negocio.
 
 Los contratos DOCX de Application están segregados: `IDocumentReader` lee snapshots, `IDocumentSorter` ordena documentos e `ITransferPlanEditor` aplica planes de transferencia. No vuelvas a unir ordenación y transferencia en una interfaz o implementación monolítica.
 

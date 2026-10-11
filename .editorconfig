@@ -29,3 +29,6 @@ dotnet_diagnostic.CS1591.severity = none
 
 [src/DocMerge.Console/**/*.cs]
 dotnet_diagnostic.CS1591.severity = none
+
+[src/DocMerge.Wpf/**/*.cs]
+dotnet_diagnostic.CS1591.severity = none
