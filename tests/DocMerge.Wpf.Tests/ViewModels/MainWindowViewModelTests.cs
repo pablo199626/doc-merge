@@ -3,6 +3,7 @@ using DocMerge.Application.Documents;
 using DocMerge.Application.Files;
 using DocMerge.Application.Generation;
 using DocMerge.Application.Pdf;
+using DocMerge.Domain.Documents;
 using DocMerge.Domain.Generation;
 using DocMerge.Wpf.Services;
 using DocMerge.Wpf.ViewModels;
@@ -58,6 +59,68 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(summary, viewModel.BatchSummary);
         Assert.Equal(ThemePreference.Dark, viewModel.SelectedThemePreference);
         Assert.True(viewModel.IsSidebarExpanded);
+    }
+
+    [Fact]
+    public void SetThemeCommand_ExplicitAndSystemPreferences_UpdatePresentationImmediately()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+
+        viewModel.SetThemeCommand.Execute(ThemePreference.Dark);
+
+        Assert.True(viewModel.IsDarkThemeSelected);
+        Assert.False(viewModel.IsSystemThemeSelected);
+        Assert.Equal("Oscuro", viewModel.ThemeSummary);
+
+        viewModel.SetThemeCommand.Execute(ThemePreference.System);
+
+        Assert.True(viewModel.IsSystemThemeSelected);
+        Assert.False(viewModel.IsDarkThemeSelected);
+        Assert.Equal("Sistema · claro", viewModel.ThemeSummary);
+    }
+
+    [Fact]
+    public async Task FilterReview_AggregateBadges_FilterWithoutChangingClassTotals()
+    {
+        using var fixture = new ViewModelFixture { UseMixedReview = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        var selectedClass = Assert.IsType<ClassReviewViewModel>(viewModel.SelectedClass);
+
+        viewModel.FilterByStatusCommand.Execute("Conflictos");
+
+        Assert.Equal(3, viewModel.VisibleStudents.Count);
+        Assert.Equal(7, selectedClass.StudentCount);
+        Assert.Equal(3, selectedClass.RecoveredCount);
+        Assert.Equal(1, selectedClass.MissingCount);
+        Assert.Equal(3, selectedClass.UnresolvedCount);
+        Assert.Equal(1, selectedClass.DocumentWarningCount);
+        Assert.Equal(1, selectedClass.OtherWarningCount);
+        Assert.True(viewModel.HasActiveReviewFilters);
+
+        viewModel.FilterByStatusCommand.Execute("Conflictos");
+
+        Assert.Equal(7, viewModel.VisibleStudents.Count);
+        Assert.False(viewModel.HasActiveReviewFilters);
+    }
+
+    [Fact]
+    public async Task ClearReviewFilters_SearchAndStatus_RestoresAllStudents()
+    {
+        using var fixture = new ViewModelFixture { UseMixedReview = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+
+        viewModel.SearchText = "AUSENTE";
+        viewModel.SelectedFilter = "Sin histórico";
+        viewModel.ClearReviewFiltersCommand.Execute(parameter: null);
+
+        Assert.Equal(string.Empty, viewModel.SearchText);
+        Assert.Equal("Todos los estados", viewModel.SelectedFilter);
+        Assert.Equal(7, viewModel.VisibleStudents.Count);
     }
 
     [Fact]
@@ -124,6 +187,8 @@ public sealed class MainWindowViewModelTests
 
         internal bool FailRosterRead { get; init; }
 
+        internal bool UseMixedReview { get; init; }
+
         internal string HistoricalDirectory => Path.Combine(_root, "history");
         private string RosterDirectory => Path.Combine(_root, "rosters");
         private string TemplatePath => Path.Combine(_root, "template.docx");
@@ -136,9 +201,9 @@ public sealed class MainWindowViewModelTests
             var discovery = new StubDiscovery(inputs);
             var preparation = new ClassGenerationService(
                 discovery,
-                new StubRosterReader(RosterPath, FailRosterRead),
+                new StubRosterReader(RosterPath, FailRosterRead, UseMixedReview),
                 new StubTemplateReader(TemplatePath),
-                new StubHistoricalReader(HistoricalPath),
+                new StubHistoricalReader(HistoricalPath, UseMixedReview),
                 new ClassGenerationPlanner(new HistoricalStudentResolver()));
             var execution = new ClassGenerationExecutionService(
                 new StubGenerator(),
@@ -173,7 +238,7 @@ public sealed class MainWindowViewModelTests
                 CancellationToken cancellationToken) => Task.FromResult(inputs);
         }
 
-        private sealed class StubRosterReader(string path, bool fail) : IClassRosterReader
+        private sealed class StubRosterReader(string path, bool fail, bool useMixedReview) : IClassRosterReader
         {
             public Task<ClassRoster> ReadAsync(string ignored, CancellationToken cancellationToken)
             {
@@ -182,11 +247,31 @@ public sealed class MainWindowViewModelTests
                     throw new IOException("Roster read failed.");
                 }
 
-                var entry = new ClassRosterEntry(
-                    "ALUMNO, UNO", "alumno, uno", "alumno uno", "12345678", 1, 1);
+                var entries = useMixedReview
+                    ? MixedEntries()
+                    : [Entry("ALUMNO, UNO", "12345678", 1)];
                 return Task.FromResult(new ClassRoster(
-                    path, "roster-hash", new ClassIdentifier("ESO", 2, "A"), [entry], 1, false));
+                    path, "roster-hash", new ClassIdentifier("ESO", 2, "A"), entries, 1, false));
             }
+
+            private static ClassRosterEntry[] MixedEntries() =>
+            [
+                Entry("ÚNICO, ALUMNO", "10000001", 1),
+                Entry("EQUIVALENTE, ALUMNO", "10000002", 2),
+                Entry("AUSENTE, ALUMNO", "10000003", 3),
+                Entry("CONFLICTO, ALUMNO", "10000004", 4),
+                Entry("AMBIGUO, ALUMNO", "10000005", 5),
+                Entry("AMBIGUO ALUMNO", "10000006", 6),
+                Entry("OTRO, ÚNICO", "10000007", 7),
+            ];
+
+            private static ClassRosterEntry Entry(string name, string number, int ordinal) => new(
+                name,
+                name,
+                StudentNameMatchKey.Create(name),
+                number,
+                1,
+                ordinal);
         }
 
         private sealed class StubTemplateReader(string path) : IGenerationTemplateReader
@@ -198,13 +283,41 @@ public sealed class MainWindowViewModelTests
                     path, "template-hash", 0, 0, 1, ["NIA", header, "Información"], "<row />"));
         }
 
-        private sealed class StubHistoricalReader(string path) : IHistoricalStudentReader
+        private sealed class StubHistoricalReader(string path, bool useMixedReview) : IHistoricalStudentReader
         {
             public Task<HistoricalDocumentSnapshot> ReadAsync(
                 string ignored,
                 string header,
                 CancellationToken cancellationToken) => Task.FromResult(new HistoricalDocumentSnapshot(
-                    path, "historical-hash", ["NIA", header, "Información"], []));
+                    path,
+                    "historical-hash",
+                    ["NIA", header, "Información"],
+                    useMixedReview ? MixedCandidates(path) : []));
+
+            private static HistoricalStudentCandidate[] MixedCandidates(string path) =>
+            [
+                Candidate(path, "ÚNICO, ALUMNO", "unique"),
+                Candidate(path, "EQUIVALENTE, ALUMNO", "equivalent"),
+                Candidate(path + ".copy", "EQUIVALENTE, ALUMNO", "equivalent"),
+                Candidate(path, "CONFLICTO, ALUMNO", "first"),
+                Candidate(path + ".copy", "CONFLICTO, ALUMNO", "second"),
+                Candidate(path, "AMBIGUO, ALUMNO", "ambiguous"),
+                Candidate(path, "OTRO, ÚNICO", "other"),
+            ];
+
+            private static HistoricalStudentCandidate Candidate(string documentPath, string name, string signature)
+            {
+                var matchKey = StudentNameMatchKey.Create(name);
+                var record = new DocumentRecord(
+                    documentPath,
+                    0,
+                    1,
+                    name,
+                    name,
+                    "<row />",
+                    new RecordDependencies([], [], []));
+                return new HistoricalStudentCandidate(record, matchKey, signature);
+            }
         }
 
         private sealed class StubGenerator : IClassDocumentGenerator

@@ -9,18 +9,14 @@
         Title="DocMerge — Generación de clases"
         Width="1366" Height="820" MinWidth="720" MinHeight="560"
         WindowStartupLocation="CenterScreen"
+        Loaded="MainWindow_Loaded"
         SizeChanged="MainWindow_SizeChanged"
         PreviewKeyDown="MainWindow_PreviewKeyDown">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
 
         <Style x:Key="SidebarLabel" TargetType="FrameworkElement">
-            <Setter Property="Visibility" Value="Visible" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsSidebarExpanded}" Value="False">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                </DataTrigger>
-            </Style.Triggers>
+            <Setter Property="Opacity" Value="1" />
         </Style>
 
         <Style x:Key="StepTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
@@ -202,19 +198,19 @@
 
     <Grid Background="{DynamicResource WindowBrush}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="{Binding SidebarColumnWidth}" />
+            <ColumnDefinition x:Name="SidebarColumn" Width="64" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <Button Grid.Column="1" Panel.ZIndex="8"
                 Background="{DynamicResource OverlayBrush}" BorderThickness="0"
-                Command="{Binding CloseSidebarOverlayCommand}"
                 Click="SidebarOverlay_Click"
                 Visibility="{Binding IsSidebarOverlayVisible, Converter={StaticResource BooleanVisibility}}"
                 automation:AutomationProperties.Name="Cerrar menú lateral" />
 
-        <Border Grid.Column="0" Panel.ZIndex="10" Width="{Binding SidebarWidth}"
+        <Border x:Name="SidebarBorder" Grid.Column="0" Panel.ZIndex="10" Width="64"
                 HorizontalAlignment="Left"
+                ClipToBounds="True"
                 Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
                 Padding="10">
@@ -224,7 +220,6 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
@@ -246,7 +241,7 @@
                 </Grid>
 
                 <Button x:Name="SidebarToggleButton" Grid.Row="1" Margin="0,12,0,4" Style="{StaticResource SidebarActionButton}"
-                        Command="{Binding ToggleSidebarCommand}"
+                        Click="SidebarToggleButton_Click"
                         ToolTip="Expandir o contraer menú"
                         automation:AutomationProperties.Name="Expandir o contraer menú">
                     <Grid>
@@ -254,7 +249,18 @@
                             <ColumnDefinition Width="22" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ui:SymbolIcon Symbol="PanelLeftExpand20" FontSize="20" />
+                        <ui:SymbolIcon FontSize="20">
+                            <ui:SymbolIcon.Style>
+                                <Style TargetType="ui:SymbolIcon">
+                                    <Setter Property="Symbol" Value="PanelLeftExpand20" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSidebarExpanded}" Value="True">
+                                            <Setter Property="Symbol" Value="PanelLeftContract20" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ui:SymbolIcon.Style>
+                        </ui:SymbolIcon>
                         <TextBlock Grid.Column="1" Text="Contraer menú" Margin="10,0,0,0"
                                    VerticalAlignment="Center" TextWrapping="NoWrap"
                                    Style="{StaticResource SidebarLabel}" />
@@ -278,8 +284,8 @@
 
                 <Button x:Name="ThemeMenuButton" Grid.Row="4" Margin="0,0,0,8"
                         Style="{StaticResource SidebarActionButton}"
-                        Click="ThemeMenuButton_Click" ToolTip="Cambiar apariencia"
-                        automation:AutomationProperties.Name="Cambiar apariencia">
+                        Click="ThemeMenuButton_Click" ToolTip="{Binding ThemeSummary}"
+                        automation:AutomationProperties.Name="{Binding ThemeSummary}">
                     <Button.ContextMenu>
                         <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                             <MenuItem Header="Sistema" Command="{Binding SetThemeCommand}" IsCheckable="True"
@@ -304,7 +310,21 @@
                             <ColumnDefinition Width="22" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ui:SymbolIcon Symbol="Desktop20" FontSize="20" />
+                        <ui:SymbolIcon FontSize="20">
+                            <ui:SymbolIcon.Style>
+                                <Style TargetType="ui:SymbolIcon">
+                                    <Setter Property="Symbol" Value="Desktop20" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedThemePreference}" Value="{x:Static services:ThemePreference.Light}">
+                                            <Setter Property="Symbol" Value="WeatherSunny20" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding SelectedThemePreference}" Value="{x:Static services:ThemePreference.Dark}">
+                                            <Setter Property="Symbol" Value="WeatherMoon20" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ui:SymbolIcon.Style>
+                        </ui:SymbolIcon>
                         <StackPanel Grid.Column="1" Margin="10,0,0,0" Style="{StaticResource SidebarLabel}">
                             <TextBlock Text="Apariencia" FontWeight="SemiBold" TextWrapping="NoWrap" />
                             <TextBlock Text="{Binding ThemeSummary}" Style="{StaticResource MutedText}"
@@ -313,9 +333,6 @@
                     </Grid>
                 </Button>
 
-                <TextBlock Grid.Row="5" Text="{Binding Version, StringFormat=DocMerge v{0}}"
-                           Style="{StaticResource SidebarLabel}" FontSize="11"
-                           Foreground="{DynamicResource MutedTextBrush}" Margin="2,4,0,2" />
             </Grid>
         </Border>
 
@@ -626,24 +643,76 @@
                                                 </Border>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding Code}" FontSize="16" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{Binding StudentCount, StringFormat={}{0} alumnos}"
+                                                     <TextBlock Text="{Binding StudentSummary}"
                                                                Style="{StaticResource MutedText}" FontSize="12" />
                                                 </StackPanel>
-                                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                                    <Border Style="{StaticResource Pill}" Padding="8,3"
-                                                            Background="{DynamicResource WarningSoftBrush}">
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <ui:SymbolIcon Symbol="Warning16" FontSize="14"
-                                                                           Foreground="{DynamicResource WarningBrush}" />
-                                                            <TextBlock Text="{Binding WarningCount}" Margin="4,0,0,0"
-                                                                       Foreground="{DynamicResource WarningBrush}" FontSize="11" />
-                                                        </StackPanel>
-                                                    </Border>
-                                                    <TextBlock Text="{Binding BlockingCount, StringFormat=Bloqueos: {0}}"
-                                                               Foreground="{DynamicResource ErrorBrush}" FontSize="10"
-                                                               HorizontalAlignment="Right" Margin="0,4,0,0"
-                                                               Visibility="{Binding HasBlockingIssues, Converter={StaticResource BooleanVisibility}}" />
-                                                </StackPanel>
+                                                 <WrapPanel Grid.Column="2" VerticalAlignment="Center" MaxWidth="132">
+                                                     <Button Style="{StaticResource FilterPillButton}" Padding="7,3" Margin="3"
+                                                             Background="{DynamicResource WarningSoftBrush}"
+                                                             BorderBrush="{DynamicResource WarningBrush}"
+                                                             Command="{Binding DataContext.ShowIssueGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                             CommandParameter="{Binding MissingIssues}"
+                                                             ToolTip="{Binding MissingSummary}"
+                                                             automation:AutomationProperties.Name="{Binding MissingSummary}"
+                                                             Visibility="{Binding HasMissingStudents, Converter={StaticResource BooleanVisibility}}">
+                                                         <StackPanel Orientation="Horizontal">
+                                                             <ui:SymbolIcon Symbol="Warning16" FontSize="14" Foreground="{DynamicResource WarningBrush}" />
+                                                             <TextBlock Text="{Binding MissingCount}" Margin="4,0,0,0"
+                                                                        Foreground="{DynamicResource WarningBrush}" FontSize="11" />
+                                                         </StackPanel>
+                                                     </Button>
+                                                     <Button Style="{StaticResource FilterPillButton}" Padding="7,3" Margin="3"
+                                                             Background="{DynamicResource ErrorSoftBrush}"
+                                                             BorderBrush="{DynamicResource ErrorBrush}"
+                                                             Command="{Binding DataContext.ShowIssueGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                             CommandParameter="{Binding UnresolvedIssues}"
+                                                             ToolTip="{Binding UnresolvedSummary}"
+                                                             automation:AutomationProperties.Name="{Binding UnresolvedSummary}"
+                                                             Visibility="{Binding HasUnresolvedStudents, Converter={StaticResource BooleanVisibility}}">
+                                                         <StackPanel Orientation="Horizontal">
+                                                             <ui:SymbolIcon Symbol="ErrorCircle16" FontSize="14" Foreground="{DynamicResource ErrorBrush}" />
+                                                             <TextBlock Text="{Binding UnresolvedCount}" Margin="4,0,0,0"
+                                                                        Foreground="{DynamicResource ErrorBrush}" FontSize="11" />
+                                                         </StackPanel>
+                                                     </Button>
+                                                     <Button Style="{StaticResource FilterPillButton}" Padding="7,3" Margin="3"
+                                                             Command="{Binding DataContext.ShowIssueGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                             CommandParameter="{Binding DocumentIssues}"
+                                                             ToolTip="{Binding DocumentWarningSummary}"
+                                                             automation:AutomationProperties.Name="{Binding DocumentWarningSummary}"
+                                                             Visibility="{Binding HasDocumentWarnings, Converter={StaticResource BooleanVisibility}}">
+                                                         <StackPanel Orientation="Horizontal">
+                                                             <ui:SymbolIcon Symbol="Info16" FontSize="14" Foreground="{DynamicResource MutedTextBrush}" />
+                                                             <TextBlock Text="{Binding DocumentWarningCount}" Margin="4,0,0,0" FontSize="11" />
+                                                         </StackPanel>
+                                                     </Button>
+                                                     <Button Style="{StaticResource FilterPillButton}" Padding="7,3" Margin="3"
+                                                             Command="{Binding DataContext.ShowIssueGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                             CommandParameter="{Binding OtherIssues}"
+                                                             ToolTip="{Binding OtherWarningSummary}"
+                                                             automation:AutomationProperties.Name="{Binding OtherWarningSummary}"
+                                                             Visibility="{Binding HasOtherWarnings, Converter={StaticResource BooleanVisibility}}">
+                                                         <StackPanel Orientation="Horizontal">
+                                                             <ui:SymbolIcon Symbol="Info16" FontSize="14" Foreground="{DynamicResource WarningBrush}" />
+                                                             <TextBlock Text="{Binding OtherWarningCount}" Margin="4,0,0,0"
+                                                                        Foreground="{DynamicResource WarningBrush}" FontSize="11" />
+                                                         </StackPanel>
+                                                     </Button>
+                                                     <Button Style="{StaticResource FilterPillButton}" Padding="7,3" Margin="3"
+                                                             Background="{DynamicResource ErrorSoftBrush}"
+                                                             BorderBrush="{DynamicResource ErrorBrush}"
+                                                             Command="{Binding DataContext.ShowIssueGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                             CommandParameter="{Binding BlockingIssues}"
+                                                             ToolTip="{Binding BlockingSummary}"
+                                                             automation:AutomationProperties.Name="{Binding BlockingSummary}"
+                                                             Visibility="{Binding HasBlockingIssues, Converter={StaticResource BooleanVisibility}}">
+                                                         <StackPanel Orientation="Horizontal">
+                                                             <ui:SymbolIcon Symbol="DismissCircle16" FontSize="14" Foreground="{DynamicResource ErrorBrush}" />
+                                                             <TextBlock Text="{Binding BlockingCount}" Margin="4,0,0,0"
+                                                                        Foreground="{DynamicResource ErrorBrush}" FontSize="11" />
+                                                         </StackPanel>
+                                                     </Button>
+                                                 </WrapPanel>
                                             </Grid>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
@@ -690,47 +759,113 @@
                                     </ComboBox.Style>
                                 </ComboBox>
 
-                                <WrapPanel Grid.Row="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding SelectedClass.Code, StringFormat=Alumnos de {0}}"
-                                               Style="{StaticResource SectionHeading}" Margin="0,0,12,6" />
-                                    <Border Style="{StaticResource Pill}" Background="{DynamicResource SuccessSoftBrush}" Margin="0,0,8,6">
-                                        <StackPanel Orientation="Horizontal">
-                                            <ui:SymbolIcon Symbol="CheckmarkCircle16" FontSize="14" Foreground="{DynamicResource SuccessBrush}" />
-                                            <TextBlock Text="{Binding SelectedClass.RecoveredCount, StringFormat={}{0} recuperados}"
-                                                       Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="4,0,0,0" />
-                                        </StackPanel>
-                                    </Border>
-                                    <Border Style="{StaticResource Pill}" Background="{DynamicResource WarningSoftBrush}" Margin="0,0,8,6">
-                                        <StackPanel Orientation="Horizontal">
-                                            <ui:SymbolIcon Symbol="Warning16" FontSize="14" Foreground="{DynamicResource WarningBrush}" />
-                                            <TextBlock Text="{Binding SelectedClass.MissingCount, StringFormat={}{0} sin histórico}"
-                                                       Foreground="{DynamicResource WarningBrush}" FontSize="11" Margin="4,0,0,0" />
-                                        </StackPanel>
-                                    </Border>
-                                    <Border Style="{StaticResource Pill}" Background="{DynamicResource ErrorSoftBrush}" Margin="0,0,0,6">
-                                        <StackPanel Orientation="Horizontal">
-                                            <ui:SymbolIcon Symbol="ErrorCircle16" FontSize="14" Foreground="{DynamicResource ErrorBrush}" />
-                                            <TextBlock Text="{Binding SelectedClass.UnresolvedCount, StringFormat={}{0} conflictos}"
-                                                       Foreground="{DynamicResource ErrorBrush}" FontSize="11" Margin="4,0,0,0" />
-                                        </StackPanel>
-                                    </Border>
-                                </WrapPanel>
+                                 <WrapPanel Grid.Row="1" VerticalAlignment="Center">
+                                     <TextBlock Text="{Binding SelectedClass.Code, StringFormat=Alumnos de {0}}"
+                                                Style="{StaticResource SectionHeading}" Margin="0,0,12,6" />
+                                     <Button Style="{StaticResource FilterPillButton}" Background="{DynamicResource SuccessSoftBrush}"
+                                             BorderBrush="{DynamicResource SuccessBrush}" Margin="0,0,8,6"
+                                             Command="{Binding FilterByStatusCommand}" CommandParameter="Recuperados"
+                                             ToolTip="Filtrar por alumnos recuperados"
+                                             automation:AutomationProperties.Name="Filtrar por alumnos recuperados"
+                                             Visibility="{Binding SelectedClass.HasRecoveredStudents, Converter={StaticResource BooleanVisibility}}">
+                                         <StackPanel Orientation="Horizontal">
+                                             <ui:SymbolIcon Symbol="CheckmarkCircle16" FontSize="14" Foreground="{DynamicResource SuccessBrush}" />
+                                             <TextBlock Text="{Binding SelectedClass.RecoveredSummary}"
+                                                        Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="4,0,0,0" />
+                                         </StackPanel>
+                                     </Button>
+                                     <Button Style="{StaticResource FilterPillButton}" Background="{DynamicResource WarningSoftBrush}"
+                                             BorderBrush="{DynamicResource WarningBrush}" Margin="0,0,8,6"
+                                             Command="{Binding FilterByStatusCommand}" CommandParameter="Sin histórico"
+                                             ToolTip="Filtrar por alumnos sin histórico"
+                                             automation:AutomationProperties.Name="Filtrar por alumnos sin histórico"
+                                             Visibility="{Binding SelectedClass.HasMissingStudents, Converter={StaticResource BooleanVisibility}}">
+                                         <StackPanel Orientation="Horizontal">
+                                             <ui:SymbolIcon Symbol="Warning16" FontSize="14" Foreground="{DynamicResource WarningBrush}" />
+                                             <TextBlock Text="{Binding SelectedClass.MissingSummary}"
+                                                        Foreground="{DynamicResource WarningBrush}" FontSize="11" Margin="4,0,0,0" />
+                                         </StackPanel>
+                                     </Button>
+                                     <Button Style="{StaticResource FilterPillButton}" Background="{DynamicResource ErrorSoftBrush}"
+                                             BorderBrush="{DynamicResource ErrorBrush}" Margin="0,0,8,6"
+                                             Command="{Binding FilterByStatusCommand}" CommandParameter="Conflictos"
+                                             ToolTip="Filtrar por conflicto histórico o identidad ambigua; no implica bloqueo"
+                                             automation:AutomationProperties.Name="Filtrar por conflictos"
+                                             Visibility="{Binding SelectedClass.HasUnresolvedStudents, Converter={StaticResource BooleanVisibility}}">
+                                         <StackPanel Orientation="Horizontal">
+                                             <ui:SymbolIcon Symbol="ErrorCircle16" FontSize="14" Foreground="{DynamicResource ErrorBrush}" />
+                                             <TextBlock Text="{Binding SelectedClass.UnresolvedSummary}"
+                                                        Foreground="{DynamicResource ErrorBrush}" FontSize="11" Margin="4,0,0,0" />
+                                         </StackPanel>
+                                     </Button>
+                                     <Button Style="{StaticResource FilterPillButton}" Margin="0,0,8,6"
+                                             Command="{Binding ShowIssueGroupCommand}" CommandParameter="{Binding SelectedClass.DocumentIssues}"
+                                             ToolTip="{Binding SelectedClass.DocumentWarningSummary}"
+                                             automation:AutomationProperties.Name="{Binding SelectedClass.DocumentWarningSummary}"
+                                             Visibility="{Binding SelectedClass.HasDocumentWarnings, Converter={StaticResource BooleanVisibility}}">
+                                         <StackPanel Orientation="Horizontal">
+                                             <ui:SymbolIcon Symbol="Info16" FontSize="14" Foreground="{DynamicResource MutedTextBrush}" />
+                                             <TextBlock Text="{Binding SelectedClass.DocumentWarningSummary}" FontSize="11" Margin="4,0,0,0" />
+                                         </StackPanel>
+                                     </Button>
+                                     <Button Style="{StaticResource FilterPillButton}" Margin="0,0,8,6"
+                                             Background="{DynamicResource WarningSoftBrush}"
+                                             BorderBrush="{DynamicResource WarningBrush}"
+                                             Command="{Binding ShowIssueGroupCommand}" CommandParameter="{Binding SelectedClass.OtherIssues}"
+                                             ToolTip="{Binding SelectedClass.OtherWarningSummary}"
+                                             automation:AutomationProperties.Name="{Binding SelectedClass.OtherWarningSummary}"
+                                             Visibility="{Binding SelectedClass.HasOtherWarnings, Converter={StaticResource BooleanVisibility}}">
+                                         <StackPanel Orientation="Horizontal">
+                                             <ui:SymbolIcon Symbol="Info16" FontSize="14" Foreground="{DynamicResource WarningBrush}" />
+                                             <TextBlock Text="{Binding SelectedClass.OtherWarningSummary}"
+                                                        Foreground="{DynamicResource WarningBrush}" FontSize="11" Margin="4,0,0,0" />
+                                         </StackPanel>
+                                     </Button>
+                                     <Button Style="{StaticResource FilterPillButton}" Margin="0,0,8,6"
+                                             Background="{DynamicResource ErrorSoftBrush}"
+                                             BorderBrush="{DynamicResource ErrorBrush}"
+                                             Command="{Binding ShowIssueGroupCommand}" CommandParameter="{Binding SelectedClass.BlockingIssues}"
+                                             ToolTip="{Binding SelectedClass.BlockingSummary}"
+                                             automation:AutomationProperties.Name="{Binding SelectedClass.BlockingSummary}"
+                                             Visibility="{Binding SelectedClass.HasBlockingIssues, Converter={StaticResource BooleanVisibility}}">
+                                         <StackPanel Orientation="Horizontal">
+                                             <ui:SymbolIcon Symbol="DismissCircle16" FontSize="14" Foreground="{DynamicResource ErrorBrush}" />
+                                             <TextBlock Text="{Binding SelectedClass.BlockingSummary}"
+                                                        Foreground="{DynamicResource ErrorBrush}" FontSize="11" Margin="4,0,0,0" />
+                                         </StackPanel>
+                                     </Button>
+                                     <Button Style="{StaticResource FilterPillButton}" Margin="0,0,8,6"
+                                             Command="{Binding ShowIssueGroupCommand}" CommandParameter="{Binding SelectedClass.AllIssues}"
+                                             ToolTip="Abrir las incidencias de la clase"
+                                             automation:AutomationProperties.Name="Abrir las incidencias de la clase"
+                                             Visibility="{Binding SelectedClass.HasIssues, Converter={StaticResource BooleanVisibility}}">
+                                         <StackPanel Orientation="Horizontal">
+                                             <ui:SymbolIcon Symbol="Open16" FontSize="14" Foreground="{DynamicResource AccentBrush}" />
+                                             <TextBlock Text="Ver incidencias" Foreground="{DynamicResource AccentBrush}"
+                                                        FontSize="11" Margin="4,0,0,0" />
+                                         </StackPanel>
+                                     </Button>
+                                 </WrapPanel>
 
-                                <Grid Grid.Row="2" Margin="0,8,0,12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="220" />
-                                    </Grid.ColumnDefinitions>
+                                 <Grid Grid.Row="2" Margin="0,8,0,12">
+                                     <Grid.ColumnDefinitions>
+                                         <ColumnDefinition Width="*" />
+                                         <ColumnDefinition Width="220" />
+                                         <ColumnDefinition Width="Auto" />
+                                     </Grid.ColumnDefinitions>
                                     <ui:TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                                                 PlaceholderText="Buscar alumno o NIA…"
                                                 automation:AutomationProperties.Name="Buscar alumno o NIA" />
-                                    <ComboBox Grid.Column="1" Margin="10,0,0,0" ItemsSource="{Binding StatusFilters}"
-                                              SelectedItem="{Binding SelectedFilter}"
-                                              automation:AutomationProperties.Name="Filtrar por estado" />
-                                </Grid>
+                                     <ComboBox Grid.Column="1" Margin="10,0,0,0" ItemsSource="{Binding StatusFilters}"
+                                               SelectedItem="{Binding SelectedFilter}"
+                                               automation:AutomationProperties.Name="Filtrar por estado" />
+                                     <Button Grid.Column="2" Margin="8,0,0,0" Content="Limpiar filtros"
+                                             Command="{Binding ClearReviewFiltersCommand}"
+                                             Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
+                                 </Grid>
 
                                 <Grid Grid.Row="3">
-                                    <DataGrid ItemsSource="{Binding VisibleStudents}" AutoGenerateColumns="False"
+                                    <DataGrid x:Name="ReviewGrid" ItemsSource="{Binding VisibleStudents}" AutoGenerateColumns="False"
                                               MinWidth="0" HorizontalAlignment="Stretch"
                                               EnableColumnVirtualization="True"
                                               VirtualizingPanel.IsVirtualizing="True"
@@ -826,8 +961,12 @@
                                         </StackPanel>
                                     </Border>
                                 </Grid>
-                                <TextBlock Grid.Row="4" Text="{Binding VisibleStudentSummary}" Margin="0,8,0,0"
-                                           Style="{StaticResource MutedText}" />
+                                 <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+                                     <TextBlock Text="{Binding VisibleStudentSummary}" Style="{StaticResource MutedText}" />
+                                     <TextBlock Text="{Binding ActiveFilterSummary, StringFormat= · {0}}" Margin="8,0,0,0"
+                                                Foreground="{DynamicResource AccentBrush}"
+                                                Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
+                                 </StackPanel>
                             </Grid>
                         </Border>
                     </Grid>

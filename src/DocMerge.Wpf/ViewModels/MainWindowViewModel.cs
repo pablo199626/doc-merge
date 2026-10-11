@@ -17,6 +17,14 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private const double ExpandedSidebarWidth = 220;
     private const double SidebarOverlayThreshold = 900;
     private const double CompactReviewThreshold = 1160;
+    private const string AllStatusesFilter = "Todos los estados";
+    private const string RecoveredFilter = "Recuperados";
+    private const string UniqueMatchFilter = "Recuperado";
+    private const string EquivalentMatchesFilter = "Recuperado · históricos equivalentes";
+    private const string MissingFilter = "Sin histórico";
+    private const string UnresolvedFilter = "Conflictos";
+    private const string ConflictingDataFilter = "Conflicto histórico";
+    private const string AmbiguousIdentityFilter = "Identidad ambigua";
     private readonly ClassGenerationService _preparationService;
     private readonly ClassGenerationExecutionService _executionService;
     private readonly IFileDialogService _dialogs;
@@ -37,7 +45,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private string _progressText = string.Empty;
     private ClassReviewViewModel? _selectedClass;
     private string _searchText = string.Empty;
-    private string _selectedFilter = "Todos los estados";
+    private string _selectedFilter = AllStatusesFilter;
     private string? _outputParent;
     private string _outputFolderName = "Clases generadas";
     private string? _publishedDirectory;
@@ -90,7 +98,10 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         OpenOutputCommand = new RelayCommand(_ => OpenOutput(), _ => PublishedDirectory is not null);
         ShowIssueCommand = new RelayCommand(ShowIssue);
         ShowAllIssuesCommand = new RelayCommand(_ => ShowAllIssues(), _ => Issues.Count > 0);
+        ShowIssueGroupCommand = new RelayCommand(ShowIssueGroup);
         ShowStudentCommand = new RelayCommand(ShowStudent);
+        FilterByStatusCommand = new RelayCommand(FilterByStatus);
+        ClearReviewFiltersCommand = new RelayCommand(_ => ClearReviewFilters(), _ => HasActiveReviewFilters);
         SetThemeCommand = new RelayCommand(SetTheme);
         ToggleSidebarCommand = new RelayCommand(_ => IsSidebarExpanded = !IsSidebarExpanded);
         CloseSidebarOverlayCommand = new RelayCommand(_ => IsSidebarExpanded = false);
@@ -120,12 +131,14 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets available review filters.</summary>
     public IReadOnlyList<string> StatusFilters { get; } =
     [
-        "Todos los estados",
-        "Recuperado",
-        "Recuperado · históricos equivalentes",
-        "Sin histórico",
-        "Conflicto histórico",
-        "Identidad ambigua",
+        AllStatusesFilter,
+        RecoveredFilter,
+        UniqueMatchFilter,
+        EquivalentMatchesFilter,
+        MissingFilter,
+        UnresolvedFilter,
+        ConflictingDataFilter,
+        AmbiguousIdentityFilter,
     ];
 
     /// <summary>Gets the command that opens an input selector.</summary>
@@ -164,8 +177,17 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the command that shows all batch issues.</summary>
     public RelayCommand ShowAllIssuesCommand { get; }
 
+    /// <summary>Gets the command that shows one traceable class-issue subset.</summary>
+    public RelayCommand ShowIssueGroupCommand { get; }
+
     /// <summary>Gets the command that shows student detail.</summary>
     public RelayCommand ShowStudentCommand { get; }
+
+    /// <summary>Gets the command that activates a review-only status filter.</summary>
+    public RelayCommand FilterByStatusCommand { get; }
+
+    /// <summary>Gets the command that clears search and status filters.</summary>
+    public RelayCommand ClearReviewFiltersCommand { get; }
 
     /// <summary>Gets the command that selects a color theme.</summary>
     public RelayCommand SetThemeCommand { get; }
@@ -373,6 +395,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             if (SetProperty(ref _searchText, value))
             {
                 ApplyStudentFilter();
+                NotifyReviewFilterChanged();
             }
         }
     }
@@ -386,6 +409,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             if (SetProperty(ref _selectedFilter, value))
             {
                 ApplyStudentFilter();
+                NotifyReviewFilterChanged();
             }
         }
     }
@@ -398,12 +422,25 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets whether the active filters contain at least one student.</summary>
     public bool HasVisibleStudents => VisibleStudents.Count > 0;
 
+    /// <summary>Gets whether search or status filtering is active.</summary>
+    public bool HasActiveReviewFilters => !string.IsNullOrWhiteSpace(SearchText)
+        || SelectedFilter != AllStatusesFilter;
+
+    /// <summary>Gets a readable description of active review filters.</summary>
+    public string ActiveFilterSummary => (string.IsNullOrWhiteSpace(SearchText), SelectedFilter) switch
+    {
+        (true, AllStatusesFilter) => string.Empty,
+        (false, AllStatusesFilter) => "Búsqueda activa",
+        (true, _) => $"Filtro: {SelectedFilter}",
+        _ => $"Búsqueda · Filtro: {SelectedFilter}",
+    };
+
     /// <summary>Gets the complete batch summary.</summary>
     public string BatchSummary => _prepared is null
         ? string.Empty
-        : $"{_prepared.Plan.Classes.Count} documentos · "
-            + $"{_prepared.Plan.Classes.Sum(item => item.Rows.Count)} alumnos · "
-            + $"{_prepared.Plan.Issues.Count} incidencias";
+        : $"{CountText(_prepared.Plan.Classes.Count, "documento", "documentos")} · "
+            + $"{CountText(_prepared.Plan.Classes.Sum(item => item.Rows.Count), "alumno", "alumnos")} · "
+            + CountText(_prepared.Plan.Issues.Count, "incidencia", "incidencias");
 
     /// <summary>Gets whether blocking issues prevent final generation.</summary>
     public bool HasBlockingIssues => _prepared?.Plan.HasBlockingIssues == true;
@@ -775,9 +812,20 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         || student.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)
         || student.StudentNumber.Contains(search, StringComparison.OrdinalIgnoreCase);
 
-    private bool MatchesStatus(StudentReviewViewModel student) =>
-        SelectedFilter == "Todos los estados"
-        || string.Equals(student.Status, SelectedFilter, StringComparison.Ordinal);
+    private bool MatchesStatus(StudentReviewViewModel student) => SelectedFilter switch
+    {
+        AllStatusesFilter => true,
+        RecoveredFilter => student.ResolutionType is HistoricalResolutionType.UniqueMatch
+            or HistoricalResolutionType.EquivalentMatches,
+        UniqueMatchFilter => student.ResolutionType == HistoricalResolutionType.UniqueMatch,
+        EquivalentMatchesFilter => student.ResolutionType == HistoricalResolutionType.EquivalentMatches,
+        MissingFilter => student.ResolutionType == HistoricalResolutionType.MissingHistoricalStudent,
+        UnresolvedFilter => student.ResolutionType is HistoricalResolutionType.ConflictingHistoricalData
+            or HistoricalResolutionType.AmbiguousStudentIdentity,
+        ConflictingDataFilter => student.ResolutionType == HistoricalResolutionType.ConflictingHistoricalData,
+        AmbiguousIdentityFilter => student.ResolutionType == HistoricalResolutionType.AmbiguousStudentIdentity,
+        _ => false,
+    };
 
     private static ReviewIssueViewModel CreateReviewIssue(GenerationIssue issue)
     {
@@ -843,16 +891,45 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private void ShowIssueGroup(object? parameter)
+    {
+        if (parameter is not ClassIssueGroupViewModel { Issues.Count: > 0 } group)
+        {
+            return;
+        }
+
+        ShowIssues($"{group.Title} ({group.Issues.Count})", group.Issues);
+    }
+
     private void ShowAllIssues()
+    {
+        ShowIssues($"Incidencias del lote ({Issues.Count})", Issues);
+    }
+
+    private void ShowIssues(string title, IEnumerable<ReviewIssueViewModel> issues)
     {
         var body = string.Join(
             $"{Environment.NewLine}{Environment.NewLine}",
-            Issues.Select(issue =>
+            issues.Select(issue =>
                 $"[{issue.Severity}] {issue.Title} — {issue.Scope}{Environment.NewLine}"
                 + $"{issue.Issue.Detail}{Environment.NewLine}{issue.Consequence}"));
-        DetailRequested?.Invoke(this, new DetailRequestedEventArgs(
-            $"Incidencias del lote ({Issues.Count})",
-            body));
+        DetailRequested?.Invoke(this, new DetailRequestedEventArgs(title, body));
+    }
+
+    private void FilterByStatus(object? parameter)
+    {
+        if (parameter is not string filter || !StatusFilters.Contains(filter, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        SelectedFilter = SelectedFilter == filter ? AllStatusesFilter : filter;
+    }
+
+    private void ClearReviewFilters()
+    {
+        SearchText = string.Empty;
+        SelectedFilter = AllStatusesFilter;
     }
 
     private void InvalidatePreparedReview()
@@ -946,6 +1023,13 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsDarkThemeSelected));
     }
 
+    private void NotifyReviewFilterChanged()
+    {
+        OnPropertyChanged(nameof(HasActiveReviewFilters));
+        OnPropertyChanged(nameof(ActiveFilterSummary));
+        ClearReviewFiltersCommand.NotifyCanExecuteChanged();
+    }
+
     private void SetInputError(GenerationInputException error)
     {
         if (error.InputType == GenerationInputType.InputSet)
@@ -993,6 +1077,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private static string UnitProgress(string label, ClassGenerationProgress progress) =>
         progress.Total.HasValue ? $"{label}: {progress.Completed} de {progress.Total.Value}" : $"{label}…";
+
+    private static string CountText(int count, string singular, string plural) =>
+        $"{count} {(count == 1 ? singular : plural)}";
 
     private void HandleUnexpectedError(Exception error)
     {

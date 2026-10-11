@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using DocMerge.Wpf.ViewModels;
 
 namespace DocMerge.Wpf;
@@ -11,7 +13,14 @@ namespace DocMerge.Wpf;
 public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
+    private readonly Stopwatch _sidebarAnimationClock = new();
     private bool _closeAfterCancellation;
+    private bool _isSidebarAnimating;
+    private double _sidebarFromWidth;
+    private double _sidebarToWidth;
+    private double _columnFromWidth;
+    private double _columnToWidth;
+    private static readonly TimeSpan SidebarAnimationDuration = TimeSpan.FromMilliseconds(200);
 
     /// <summary>Initializes the main window.</summary>
     public MainWindow(MainWindowViewModel viewModel)
@@ -28,6 +37,8 @@ public partial class MainWindow : Window
         if (!_viewModel.IsBusy || _closeAfterCancellation)
         {
             _viewModel.DetailRequested -= ShowDetail;
+            SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
+            StopSidebarAnimation();
             base.OnClosing(e);
             return;
         }
@@ -103,8 +114,20 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e) =>
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        SystemParameters.StaticPropertyChanged += OnSystemParametersChanged;
+        ApplySidebarLayout(useAnimation: false);
+    }
+
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
         _viewModel.UpdateWindowWidth(e.NewSize.Width);
+        if (IsLoaded)
+        {
+            ApplySidebarLayout(useAnimation: false);
+        }
+    }
 
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -114,11 +137,23 @@ public partial class MainWindow : Window
         }
 
         _viewModel.CloseSidebarOverlayCommand.Execute(parameter: null);
+        ApplySidebarLayout(useAnimation: true);
         SidebarToggleButton.Focus();
         e.Handled = true;
     }
 
-    private void SidebarOverlay_Click(object sender, RoutedEventArgs e) => SidebarToggleButton.Focus();
+    private void SidebarToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.ToggleSidebarCommand.Execute(parameter: null);
+        ApplySidebarLayout(useAnimation: true);
+    }
+
+    private void SidebarOverlay_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.CloseSidebarOverlayCommand.Execute(parameter: null);
+        ApplySidebarLayout(useAnimation: true);
+        SidebarToggleButton.Focus();
+    }
 
     private void ThemeMenuButton_Click(object sender, RoutedEventArgs e)
     {
@@ -133,8 +168,135 @@ public partial class MainWindow : Window
 
     private void ShowDetail(object? sender, DetailRequestedEventArgs e)
     {
+        var invoker = Keyboard.FocusedElement;
         var dialog = new DetailWindow(e.Title, e.Body) { Owner = this };
         dialog.ShowDialog();
+        Dispatcher.BeginInvoke(new Action(() => RestoreDetailInvoker(invoker)));
+    }
+
+    private void ApplySidebarLayout(bool useAnimation)
+    {
+        var targetWidth = _viewModel.SidebarWidth;
+        var targetColumnWidth = _viewModel.SidebarColumnWidth;
+        if (!useAnimation || !SystemParameters.ClientAreaAnimation)
+        {
+            StopSidebarAnimation();
+            SetSidebarWidths(targetWidth, targetColumnWidth);
+            SetSidebarLabelOpacity(_viewModel.IsSidebarExpanded ? 1 : 0, animate: false);
+            return;
+        }
+
+        StopSidebarAnimation();
+        _sidebarFromWidth = SidebarBorder.ActualWidth > 0 ? SidebarBorder.ActualWidth : SidebarBorder.Width;
+        _columnFromWidth = SidebarColumn.ActualWidth;
+        _sidebarToWidth = targetWidth;
+        _columnToWidth = targetColumnWidth;
+        _sidebarAnimationClock.Restart();
+        _isSidebarAnimating = true;
+        CompositionTarget.Rendering += AnimateSidebarFrame;
+        SetSidebarLabelOpacity(_viewModel.IsSidebarExpanded ? 1 : 0, animate: true);
+    }
+
+    private void AnimateSidebarFrame(object? sender, EventArgs e)
+    {
+        var progress = Math.Min(1, _sidebarAnimationClock.Elapsed.TotalMilliseconds
+            / SidebarAnimationDuration.TotalMilliseconds);
+        var easedProgress = 1 - Math.Pow(1 - progress, 3);
+        SetSidebarWidths(
+            Interpolate(_sidebarFromWidth, _sidebarToWidth, easedProgress),
+            Interpolate(_columnFromWidth, _columnToWidth, easedProgress));
+        if (progress < 1)
+        {
+            return;
+        }
+
+        StopSidebarAnimation();
+        SetSidebarWidths(_sidebarToWidth, _columnToWidth);
+    }
+
+    private void StopSidebarAnimation()
+    {
+        if (!_isSidebarAnimating)
+        {
+            return;
+        }
+
+        CompositionTarget.Rendering -= AnimateSidebarFrame;
+        _sidebarAnimationClock.Stop();
+        _isSidebarAnimating = false;
+    }
+
+    private void SetSidebarWidths(double sidebarWidth, double columnWidth)
+    {
+        SidebarBorder.Width = sidebarWidth;
+        SidebarColumn.Width = new GridLength(columnWidth);
+    }
+
+    private void SetSidebarLabelOpacity(double targetOpacity, bool animate)
+    {
+        var labelStyle = FindResource("SidebarLabel") as Style;
+        foreach (var element in FindVisualChildren<FrameworkElement>(SidebarBorder)
+                     .Where(element => ReferenceEquals(element.Style, labelStyle)))
+        {
+            var currentOpacity = element.Opacity;
+            element.BeginAnimation(UIElement.OpacityProperty, animation: null);
+            if (!animate)
+            {
+                element.Opacity = targetOpacity;
+                continue;
+            }
+
+            element.BeginAnimation(
+                UIElement.OpacityProperty,
+                new DoubleAnimation(currentOpacity, targetOpacity, SidebarAnimationDuration)
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                },
+                HandoffBehavior.SnapshotAndReplace);
+        }
+    }
+
+    private void OnSystemParametersChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SystemParameters.ClientAreaAnimation)
+            || SystemParameters.ClientAreaAnimation)
+        {
+            return;
+        }
+
+        ApplySidebarLayout(useAnimation: false);
+    }
+
+    private void RestoreDetailInvoker(IInputElement? invoker)
+    {
+        if (invoker is UIElement { IsVisible: true, IsEnabled: true } element)
+        {
+            element.Focus();
+            return;
+        }
+
+        ReviewGrid.Focus();
+    }
+
+    private static double Interpolate(double start, double end, double progress) =>
+        start + ((end - start) * progress);
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     private void ResetDropHighlight(object sender)
