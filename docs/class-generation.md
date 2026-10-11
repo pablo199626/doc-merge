@@ -1,6 +1,6 @@
 # Generación de documentos de clases
 
-Estado validado el 11 de octubre de 2026. Este documento complementa
+Motor y primera interfaz WPF validados el 11 de octubre de 2026. Este documento complementa
 `AGENTS.md`; no sustituye los contratos históricos de ordenación y transferencia.
 
 ## Objetivo y fuentes de verdad
@@ -33,22 +33,43 @@ salida debe ser nueva y no admite `--force`.
 
 ## Flujo de aplicación
 
-1. `ClassGenerationService.PrepareAsync` descubre y lee todas las entradas.
+1. `ClassGenerationService.PrepareAsync` descubre y lee todas las entradas sin
+   requerir todavía una carpeta de salida.
 2. `PdfPigClassRosterReader` extrae clase, NIA, nombre, ordinal y localización.
 3. `DocxHistoricalStudentReader` prepara cada fila y su firma conservadora.
 4. `HistoricalStudentIndex` indexa todos los candidatos mediante `MatchKey`.
 5. `ClassGenerationPlanner` crea planes e incidencias estructuradas.
 6. `DocxClassDocumentGenerator` crea cada documento desde una copia de plantilla.
 7. `DocxClassGenerationValidator` valida identidades, contenido y paquete DOCX.
-8. `ClassGenerationExecutionService` vuelve a verificar hashes y publica el
-   directorio completo mediante `GenerationBatchPublisher`.
+8. `ClassGenerationExecutionService` recibe el mismo lote preparado que se ha
+   revisado, vuelve a verificar rutas y hashes y publica el directorio completo
+   mediante `GenerationBatchPublisher`.
 
 La extracción semántica y la indexación no se repiten por alumno ni por clase.
 Las relecturas posteriores están limitadas a cargar los paquetes usados para
 generar y a comprobar hashes antes de publicar.
 
-Todos los servicios de aplicación son independientes de consola y reutilizables
-por la futura interfaz WPF.
+Todos los servicios de aplicación son independientes de la presentación y son
+consumidos tanto por consola como por WPF.
+
+## Interfaz WPF
+
+`src/DocMerge.Wpf/` implementa un flujo MVVM de tres pasos: selección y análisis,
+revisión de solo lectura y generación. Expone el NIA, la procedencia histórica,
+los campos legibles y las incidencias globales o asociadas a clase/alumno. No
+renderiza Word/PDF ni permite editar o resolver manualmente los datos.
+La presentación usa controles y temas Fluent de WPF UI 4.3.0, manteniendo en
+recursos propios únicamente los colores semánticos y la identidad visual.
+La revisión visual validada presenta tarjetas compactas para las entradas, una
+lista de clases y una tabla virtualizada con búsqueda, filtro y etiquetas de
+estado. El tema debe conservar el acento `#0866F5` y contraste legible tanto al
+iniciar como al cambiar dinámicamente entre claro y oscuro.
+
+La salida se elige después de revisar. La ejecución conserva el objeto
+`PreparedClassGeneration` revisado y no crea silenciosamente un plan diferente.
+Antes de generar y antes de publicar compara de nuevo el conjunto descubierto y
+los hashes. Las carpetas temporales `.docmerge_*` quedan fuera del descubrimiento
+para que una salida situada dentro del árbol histórico no invalide su propio plan.
 
 ## Identidad y ordenación
 
@@ -111,9 +132,9 @@ No bloquean el lote, pero se devuelven para revisión:
 - `AmbiguousStudentIdentity`;
 - `PdfWithoutDeclaredTotal`.
 
-Las contradicciones y ambigüedades nunca copian información histórica. La futura
-WPF podrá presentar y resolver estos datos estructurados antes de una revisión
-final por el usuario.
+Las contradicciones y ambigüedades nunca copian información histórica. La WPF
+presenta estos datos estructurados para revisión, pero no permite resolverlos ni
+seleccionar arbitrariamente un candidato.
 
 Bloquean la publicación los problemas estructurales, incluidos:
 
@@ -134,14 +155,15 @@ Bloquean la publicación los problemas estructurales, incluidos:
 | PDF | `src/DocMerge.Infrastructure/Pdf/GroupRosterPageParser.cs` y `PdfPigClassRosterReader.cs` |
 | DOCX | `src/DocMerge.Infrastructure/Docx/Docx*Generation*.cs` |
 | Publicación | `src/DocMerge.Infrastructure/Files/GenerationBatchPublisher.cs` |
-| Presentación | `src/DocMerge.Console/Presentation/ClassGenerationPlanFormatter.cs` |
+| Presentación CLI | `src/DocMerge.Console/Presentation/ClassGenerationPlanFormatter.cs` |
+| Presentación WPF | `src/DocMerge.Wpf/` |
 
 ## Límites actuales y siguientes iteraciones
 
-- `DocMerge.Wpf` todavía no existe y no debe crearse hasta que se solicite.
-- Los conflictos se representan mediante modelos e incidencias estructuradas,
-  pero todavía no existe una interfaz para que el usuario seleccione o edite una
-  resolución antes de regenerar.
+- La primera WPF cubre revisión de solo lectura; edición y resolución manual
+  quedan expresamente fuera de esta release.
+- Los conflictos se representan mediante modelos e incidencias estructuradas;
+  la interfaz los explica, pero no permite elegir o editar una resolución.
 - El CLI genera filas vacías señalizadas para ausencias, contradicciones y
   homónimos; nunca elige información dudosa.
 - No se exporta aún un informe JSON independiente. La fuente reutilizable para
@@ -153,6 +175,10 @@ Bloquean la publicación los problemas estructurales, incluidos:
   identidades, contenido, partes DOCX y publicación. Mantén una revisión visual
   en Word cuando cambie la composición de filas o la plantilla.
 - La versión sigue siendo `2.1.0`; no la incrementes sin autorización expresa.
+- La entrega WPF validada está en `release-desktop/DocMerge.exe`; la entrega de
+  consola permanece separada e intacta en `release/DocMerge.exe`.
+- Queda pendiente completar manualmente la matriz de teclado/foco, arrastrar y
+  soltar, 1366×768, DPI 125–200 % y generación integral desde la propia WPF.
 
 ## Corpus local validado
 

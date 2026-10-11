@@ -4,8 +4,8 @@
 
 - La migración de la aplicación de consola Python a C# sobre .NET 10 está completada y validada. La implementación C# es la implementación principal y la única que debe evolucionar salvo autorización expresa.
 - La implementación Python es un **oráculo histórico de comportamiento** para regresiones y paridad; no es la implementación activa ni debe recibir funcionalidades nuevas.
-- Más adelante se añadirá una interfaz gráfica de escritorio para Windows (WPF con MVVM). Por eso el núcleo debe ser independiente de cualquier interfaz: ninguna clase de dominio, aplicación o infraestructura puede usar `Console.*`, `MessageBox` ni tipos de UI.
-- `Console.*` solo se permite en el proyecto `DocMerge.Console`. La futura UI WPF consumirá exactamente los mismos casos de uso.
+- La primera interfaz gráfica de escritorio para Windows está implementada en WPF con MVVM para el flujo de generación de clases. El núcleo sigue siendo independiente de cualquier interfaz: ninguna clase de dominio, aplicación o infraestructura puede usar `Console.*`, `MessageBox` ni tipos de UI.
+- `Console.*` solo se permite en el proyecto `DocMerge.Console`. La UI WPF consume los mismos casos de uso de Application y no ejecuta la consola como subproceso.
 - Prioridad de mantenimiento: conserva los contratos observables y separa las correcciones funcionales de los refactors. No reintroduzcas diferencias frente al comportamiento ya certificado sin una decisión explícita y pruebas de regresión.
 - La referencia Python se conserva sin modificar en `legacy/python/`. `legacy/python/reference.sha256` valida sus 27 archivos. Ejecútala desde una copia temporal cuando necesite el documento real local del que depende una prueba. No copies documentos reales dentro de `legacy/` ni los incluyas en Git o en distribuciones.
 - Los módulos `identity`, `sorting`, `pdf_reader`, `docx_processor`, `matching`, `validation`, `transfer` y `cli` ya están portados. Todo cambio posterior debe mantener las pruebas de paridad aplicables y pasar la verificación completa.
@@ -25,12 +25,17 @@
 ## Estado actual tras la generación de clases
 
 - El 11 de octubre de 2026 se añadió y validó el flujo de generación de clases, manteniendo intactas las operaciones certificadas de ordenación y transferencia.
-- La suite C# actual tiene **89 pruebas superadas**: Domain 40, Application 8, Infrastructure 31 y Console 10.
+- La suite C# actual tiene **97 pruebas superadas**: Domain 40, Application 8, Infrastructure 35, Console 10 y WPF 4.
 - El corpus local de la nueva funcionalidad contiene 7 Word históricos (74 registros), 4 PDF de segundo curso (94 asignaciones) y la plantilla `ANEXO_TEMPLATE.docx`. La simulación validada obtiene 22 recuperaciones únicas, 70 ausencias históricas y 2 asignaciones ambiguas del homónimo `BENALI, OMAR` con NIA distintos.
 - Los cuatro documentos reales `2A.docx`, `2B.docx`, `2C.docx` y `2D.docx` se generaron y validaron desde el ejecutable publicado. Contienen respectivamente 24, 22, 25 y 23 alumnos.
 - La entrega actual `release/DocMerge.exe` conserva versión de archivo `2.1.0.0` y versión de producto `2.1.0`; tiene tamaño de 79.810.864 bytes y SHA-256 `61b42c2d63b791f631d0e6b4e13186a54cde865c9e36e38b862f754df9fcc2d5`.
 - El asistente sin argumentos ofrece ahora tres operaciones: transferencia, ordenación y generación de clases. La opción 3 solicita carpeta de históricos, carpeta de PDF, plantilla, carpeta nueva de salida y si se desea simular.
 - La arquitectura, los contratos y las instrucciones de mantenimiento del flujo nuevo se documentan en `docs/class-generation.md`.
+- La primera interfaz WPF implementa los tres pasos de selección, revisión de solo lectura y generación, con temas claro/oscuro, cancelación, referencias estructuradas de incidencias y detección de planes obsoletos.
+- El 11 de octubre de 2026 se rediseñó visualmente la revisión WPF conforme a las referencias locales de `assets/UX/`: tarjetas compactas, lista de clases, tabla con anchos estables, filtros y estados semánticos. Se validó con el corpus real en temas claro y oscuro, obteniendo 4 clases, 94 alumnos y 76 incidencias sin alterar el plan funcional.
+- La capa WPF usa `WPF-UI` `4.3.0` para controles y temas Fluent. El acento de marca se fija en `#0866F5`; los colores semánticos y ajustes específicos de `DataGrid` permanecen en `src/DocMerge.Wpf/Resources/`. No dupliques plantillas completas de la biblioteca cuando baste un estilo o recurso propio.
+- La entrega WPF está separada en `release-desktop/DocMerge.exe`; conserva versión de archivo `2.1.0.0` y versión de producto `2.1.0`, tiene tamaño de 152.614.715 bytes y SHA-256 `3f84468d146fbc2ce7e44c322a52d866137b07ae410cf3b1d78dae43bd78b5ff`.
+- Queda pendiente una validación manual final de teclado/foco, arrastrar y soltar, resolución 1366×768, escalado DPI 125–200 % y una generación completa iniciada desde la WPF. Las capturas de `assets/UX/` son referencias locales actualmente no versionadas: no las elimines, empaquetes ni añadas a Git sin una decisión explícita.
 
 ## Estructura de la solución
 
@@ -41,12 +46,13 @@ DocMerge.sln
 │   ├── DocMerge.Application     (casos de uso, transferencia, generación, validación, interfaces)
 │   ├── DocMerge.Infrastructure  (lectura PDF, lectura/escritura DOCX, descubrimiento y publicación)
 │   ├── DocMerge.Console         (CLI, asistente de doble clic, composición de dependencias)
-│   └── DocMerge.Wpf             (futuro; no crear hasta que se pida)
+│   └── DocMerge.Wpf             (presentación WPF del flujo de generación)
 └── tests/
     ├── DocMerge.Domain.Tests
     ├── DocMerge.Application.Tests
     ├── DocMerge.Infrastructure.Tests
-    └── DocMerge.Console.Tests
+    ├── DocMerge.Console.Tests
+    └── DocMerge.Wpf.Tests
 ```
 
 Equivalencia entre módulos Python y su destino en C#:
@@ -70,7 +76,7 @@ Las dependencias apuntan hacia el dominio: `Console` → `Application` → `Doma
 - La versión actual es `2.1.0`. Se define en un único sitio (`Directory.Build.props`) y debe mantenerse sincronizada con las guías y los ejecutables distribuidos. No cambies la versión sin autorización expresa.
 - Los contratos externos existentes se conservan exactamente: opciones del CLI (`--destino`, `--lista`, `-o`, `--simular`, `--orden`, `--cabecera`, `--force`), mensajes de usuario, la cabecera exacta `Nombre y Apellidos`, la sección `Alumnado (n)` y los nombres de entrega. La generación añade `--generar-clases`, `--historicos`, `--listas`, `--plantilla` y `--salida`; no reutilices los conceptos origen/destino para este flujo.
 - Límite de responsabilidades: la consola procesa argumentos e interacción; la ordenación registra perfiles de forma declarativa y se expone con `--orden`; la identidad normaliza identidades exactas; el lector PDF extrae y valida el listado; las correspondencias construyen el plan de acciones; la transferencia coordina la operación transaccional; la validación comprueba el resultado; el procesador DOCX lee y modifica el documento. Las nuevas reglas de orden van en el módulo de ordenación y no deben modificar el procesador XML.
-- En generación, `ClassGenerationService` prepara entradas y plan, `ClassGenerationPlanner` resuelve el índice global, `ClassGenerationExecutionService` coordina generación/validación/publicación, Infrastructure implementa PDF/DOCX/archivos y Console solo solicita datos y presenta `GenerationIssue`. No desplaces estas responsabilidades al asistente ni a la futura WPF.
+- En generación, `ClassGenerationService` prepara entradas y plan, `ClassGenerationPlanner` resuelve el índice global y `ClassGenerationExecutionService` coordina generación/validación/publicación. Infrastructure implementa PDF/DOCX/archivos; Console y WPF solo solicitan datos y presentan resultados e incidencias. No desplaces reglas o E/S documental a ninguna capa de presentación.
 - El procesador identifica de forma única la tabla por la cabecera exacta `Nombre y Apellidos` (ajustable con `--cabecera`) y deriva de ella la columna de identidad. Mueve o importa nodos XML `<w:tr>` completos: nunca reconstruir un documento ni una tabla, ni leer el contenido a través de texto plano, porque se perderían formato y contenido no tabular.
 - La ordenación simple aplica la corrección funcional aprobada tras certificar la paridad: también exige una única cabecera exacta normalizada y usa la columna derivada de esa cabecera. No restaures el comportamiento accidental de Python que aceptaba coincidencias parciales y asumía siempre la segunda columna.
 - La ordenación simple solo puede cambiar `word/document.xml`. La transferencia parte de una copia del destino y puede cambiar además estilos, numeración, relaciones, tipos de contenido y recursos estrictamente necesarios para conservar el formato del origen; debe validar el resultado temporal antes de publicarlo.
@@ -91,8 +97,9 @@ Las dependencias apuntan hacia el dominio: `Console` → `Application` → `Doma
 - Sin argumentos, el programa y el `.exe` abierto con doble clic muestran un asistente interactivo con las tres operaciones. Debe admitir rutas y carpetas arrastradas con comillas y mantener la ventana abierta al terminar.
 - La plataforma soportada es Windows x64 sobre .NET 10 LTS. Para crear el ejecutable: `dotnet publish src/DocMerge.Console -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true`. No publiques x86 hasta que exista una necesidad y una matriz de pruebas aprobadas. El resultado debe llamarse `DocMerge.exe`.
 - La entrega actual está en `release\` y contiene exclusivamente `DocMerge.exe` y `REEDME.txt`. El ZIP anterior permanece retirado: no recrees `DocMerge.zip` salvo petición expresa. La distribución pública no debe incluir documentos reales, datos personales, rutas locales, PDB ni archivos de prueba.
+- La entrega WPF se publica de forma independiente con `dotnet publish src/DocMerge.Wpf -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true` y reside en `release-desktop\`, que contiene exclusivamente `DocMerge.exe` y `REEDME.txt`. No sobrescribe ni sustituye la entrega CLI.
 - Los documentos locales privados están en `assets\documents\` y los resultados generados que se decida conservar, en `assets\outputs\`. Ambas carpetas están ignoradas por Git. No muevas estos archivos a `src\`, `tests\`, `legacy\` ni `release\`.
-- La inyección de dependencias usa `Microsoft.Extensions.DependencyInjection` `10.0.12`, fijado en el proyecto Console. Propón y autoriza cualquier actualización o dependencia nueva antes de incorporarla.
+- La inyección de dependencias usa `Microsoft.Extensions.DependencyInjection` `10.0.12`, fijado en los proyectos Console y WPF. La presentación WPF usa además `WPF-UI` `4.3.0`, aprobado para el rediseño Fluent y limitado a `DocMerge.Wpf`. Propón y autoriza cualquier actualización o dependencia nueva antes de incorporarla.
 - En este equipo, `dotnet` puede resolver primero la instalación x86 sin SDK. Si ocurre, ejecuta `C:\Program Files\dotnet\dotnet.exe`; no cambies el target ni instales otra versión como solución accidental.
 - Los artefactos de compilación (`bin/`, `obj/`, `publish/`, `dist/`) y las cachés no son código fuente y deben estar en `.gitignore`.
 
@@ -139,9 +146,9 @@ Las dependencias apuntan hacia el dominio: `Console` → `Application` → `Doma
 - El dominio no depende de frameworks, bases de datos ni librerías externas. Las dependencias apuntan hacia el dominio, nunca al revés.
 - Mantén las reglas de identidad, ordenación y correspondencias separadas de la interacción del CLI y de la lectura/escritura DOCX/PDF.
 - El núcleo no conoce la interfaz: la entrada y la salida se abstraen con interfaces o se devuelven como resultados (planes, informes, errores). Los casos de uso reciben datos y devuelven resultados; no imprimen ni leen del usuario.
-- Los avisos y los resultados de la operación (por ejemplo, ambigüedades omitidas) se devuelven como datos estructurados; la capa de presentación decide cómo mostrarlos. Esto permitirá reutilizarlos en la futura interfaz gráfica.
-- Las operaciones de E/S de archivos y las largas usan `async/await` con `CancellationToken`, para no bloquear una ventana en el futuro. No uses `.Result` ni `.Wait()`.
-- Usa inyección de dependencias explícita con `Microsoft.Extensions.DependencyInjection`, compuesta únicamente en el proyecto de entrada (`DocMerge.Console`). Evita estado global mutable y singletons ocultos. Las constantes y los registros declarativos de perfiles no deben convertirse en estado mutable de ejecución.
+- Los avisos y los resultados de la operación (por ejemplo, ambigüedades omitidas) se devuelven como datos estructurados; Console y WPF deciden cómo mostrarlos sin reinterpretar ni resolver información dudosa.
+- Las operaciones de E/S de archivos y las largas usan `async/await` con `CancellationToken` para no bloquear la WPF. No uses `.Result` ni `.Wait()`.
+- Usa inyección de dependencias explícita con `Microsoft.Extensions.DependencyInjection`, compuesta en cada proyecto de entrada (`DocMerge.Console` y `DocMerge.Wpf`). Evita estado global mutable y singletons ocultos. Las constantes y los registros declarativos de perfiles no deben convertirse en estado mutable de ejecución.
 - El parser del CLI es propio y acotado: conserva las opciones y aliases completos documentados, `--opcion=valor`, `--` y la semántica observable cubierta por pruebas. No es obligatorio reproducir abreviaciones accidentales de `argparse`. Los mensajes controlados por la aplicación son contratos exactos; los detalles procedentes del sistema operativo o de bibliotecas se comparan por tipo y datos estructurados.
 - Accede a datos externos, como PDF, DOCX o el sistema de archivos, mediante interfaces definidas en Application o Domain e implementadas en Infrastructure; no añadas infraestructura hipotética.
 - Valida y transforma los datos en los límites del sistema. El interior trabaja con datos normalizados y mantiene sus invariantes, sin repetir conversiones de entrada.

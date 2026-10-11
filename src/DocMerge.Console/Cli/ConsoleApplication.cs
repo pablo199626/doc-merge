@@ -160,7 +160,8 @@ public sealed class ConsoleApplication
 
         var profile = SortingProfiles.Get(context.Options.SortRule);
         var result = await _classGenerationExecutionService.ExecuteAsync(
-            prepared, profile, cancellationToken);
+            new ClassGenerationExecutionRequest(prepared, context.OutputPath, profile),
+            cancellationToken);
         _console.WriteLine($"Lote creado: {result.OutputDirectory}");
         foreach (var document in result.Documents)
         {

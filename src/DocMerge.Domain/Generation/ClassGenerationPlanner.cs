@@ -42,7 +42,7 @@ public sealed class ClassGenerationPlanner
                 ? CreateAmbiguousResolution(entry, index)
                 : _resolver.Resolve(entry.MatchKey, index);
             rows.Add(new StudentRowPlan(entry, resolution));
-            AddResolutionIssue(roster.ClassIdentifier, entry, resolution, issues);
+            AddResolutionIssue(roster, entry, resolution, issues);
         }
 
         return new ClassDocumentPlan(roster, rows);
@@ -68,7 +68,11 @@ public sealed class ClassGenerationPlanner
                 group.Key,
                 null,
                 "Varios PDF representan la misma clase.",
-                group.Select(roster => roster.SourcePath).ToArray()))
+                group.Select(roster => roster.SourcePath).ToArray(),
+                group.Select(roster => new GenerationIssueReference(
+                    roster.SourcePath,
+                    "documento completo",
+                    roster.ClassIdentifier)).ToArray()))
             .ToList();
         issues.AddRange(rosters.Where(roster => !roster.HasDeclaredTotal)
             .Select(roster => new GenerationIssue(
@@ -77,7 +81,11 @@ public sealed class ClassGenerationPlanner
                 roster.ClassIdentifier,
                 null,
                 "El PDF no declara un total independiente; se aplicó validación estructural estricta.",
-                [roster.SourcePath])));
+                [roster.SourcePath],
+                [new GenerationIssueReference(
+                    roster.SourcePath,
+                    "documento completo",
+                    roster.ClassIdentifier)])));
         issues.AddRange(FindDuplicateStudentNumberIssues(rosters));
         return issues;
     }
@@ -95,7 +103,12 @@ public sealed class ClassGenerationPlanner
                 group.First().entry.OriginalName,
                 $"El NIA {group.Key} aparece en varias asignaciones PDF.",
                 group.Select(item =>
-                    $"{item.roster.SourcePath}: {item.entry.Location}").ToArray()));
+                    $"{item.roster.SourcePath}: {item.entry.Location}").ToArray(),
+                group.Select(item => new GenerationIssueReference(
+                    item.roster.SourcePath,
+                    item.entry.Location,
+                    item.roster.ClassIdentifier,
+                    item.entry.StudentNumber)).ToArray()));
     }
 
     private static HashSet<string> FindAmbiguousNameKeys(IReadOnlyList<ClassRoster> rosters)
@@ -109,7 +122,7 @@ public sealed class ClassGenerationPlanner
     }
 
     private static void AddResolutionIssue(
-        ClassIdentifier classIdentifier,
+        ClassRoster roster,
         ClassRosterEntry entry,
         HistoricalResolution resolution,
         ICollection<GenerationIssue> issues)
@@ -120,19 +133,19 @@ public sealed class ClassGenerationPlanner
             HistoricalResolutionType.EquivalentMatches => CreateResolutionIssue(
                 "EquivalentHistoricalRecords", GenerationIssueSeverity.Warning,
                 "Varios registros históricos equivalentes se consolidarán.",
-                classIdentifier, entry, resolution),
+                roster, entry, resolution),
             HistoricalResolutionType.MissingHistoricalStudent => CreateResolutionIssue(
                 "MissingHistoricalStudent", GenerationIssueSeverity.Warning,
                 "El alumno no aparece en los documentos históricos.",
-                classIdentifier, entry, resolution),
+                roster, entry, resolution),
             HistoricalResolutionType.ConflictingHistoricalData => CreateResolutionIssue(
                 "ConflictingHistoricalData", GenerationIssueSeverity.Warning,
                 "Los documentos históricos contienen información contradictoria.",
-                classIdentifier, entry, resolution),
+                roster, entry, resolution),
             HistoricalResolutionType.AmbiguousStudentIdentity => CreateResolutionIssue(
                 "AmbiguousStudentIdentity", GenerationIssueSeverity.Warning,
                 "El mismo nombre corresponde a distintos NIA en los PDF.",
-                classIdentifier, entry, resolution),
+                roster, entry, resolution),
             _ => throw new InvalidOperationException("Resolución histórica no reconocida."),
         };
         if (issue is not null)
@@ -145,7 +158,7 @@ public sealed class ClassGenerationPlanner
         string code,
         GenerationIssueSeverity severity,
         string detail,
-        ClassIdentifier classIdentifier,
+        ClassRoster roster,
         ClassRosterEntry entry,
         HistoricalResolution resolution)
     {
@@ -153,7 +166,24 @@ public sealed class ClassGenerationPlanner
             .Concat(resolution.Candidates.Select(candidate =>
                 $"{candidate.Record.DocumentPath}: {candidate.Record.Location}"))
             .ToArray();
+        var structuredReferences = new[]
+        {
+            new GenerationIssueReference(
+                roster.SourcePath,
+                entry.Location,
+                roster.ClassIdentifier,
+                entry.StudentNumber),
+        }.Concat(resolution.Candidates.Select(candidate => new GenerationIssueReference(
+            candidate.Record.DocumentPath,
+            candidate.Record.Location)))
+            .ToArray();
         return new GenerationIssue(
-            code, severity, classIdentifier, entry.OriginalName, detail, references);
+            code,
+            severity,
+            roster.ClassIdentifier,
+            entry.OriginalName,
+            detail,
+            references,
+            structuredReferences);
     }
 }

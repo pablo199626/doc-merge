@@ -30,6 +30,9 @@ public sealed class DocxClassGenerationTests
         var profile = SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier);
         var generator = new DocxClassDocumentGenerator();
 
+        var candidate = Assert.Single(prepared.HistoricalDocuments[0].Candidates);
+        Assert.Contains(candidate.ReviewFields, field => field.Text == "MEDIDA");
+
         var generated = await generator.GenerateAsync(
             new GenerateClassDocumentsRequest(prepared, workingPath, profile),
             CancellationToken.None);
@@ -61,17 +64,20 @@ public sealed class DocxClassGenerationTests
             [DocxTestPackage.Header + DocxTestPackage.PersonRow("Alumno Uno", "MEDIDA")],
             marker: "HISTORICAL",
             source: true);
-        var prepared = await PrepareAsync(templatePath, historicalPath, outputPath);
+        var prepared = await PrepareAsync(templatePath, historicalPath);
         var reader = new DocxDocumentReader();
         var service = new ClassGenerationExecutionService(
             new DocxClassDocumentGenerator(),
             new DocxClassGenerationValidator(reader),
             new GenerationBatchPublisher(),
-            new PhysicalFileStore());
+            new PhysicalFileStore(),
+            new StaticInputDiscovery(prepared.Inputs));
 
         var result = await service.ExecuteAsync(
-            prepared,
-            SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier),
+            new ClassGenerationExecutionRequest(
+                prepared,
+                outputPath,
+                SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier)),
             CancellationToken.None);
 
         Assert.Equal(Path.GetFullPath(outputPath), Path.GetFullPath(result.OutputDirectory));
@@ -83,8 +89,7 @@ public sealed class DocxClassGenerationTests
 
     private static async Task<PreparedClassGeneration> PrepareAsync(
         string templatePath,
-        string historicalPath,
-        string? outputPath = null)
+        string historicalPath)
     {
         var template = await new DocxTemplateReader().ReadAsync(
             templatePath, "Nombre y Apellidos", CancellationToken.None);
@@ -109,7 +114,6 @@ public sealed class DocxClassGenerationTests
             Path.GetDirectoryName(historicalPath)!,
             Path.GetDirectoryName(templatePath)!,
             templatePath,
-            outputPath ?? Path.Combine(Path.GetDirectoryName(templatePath)!, "output"),
             "Nombre y Apellidos");
         return new PreparedClassGeneration(
             request,
@@ -128,5 +132,54 @@ public sealed class DocxClassGenerationTests
             number,
             1,
             ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DiscoveredInputsChanged_RejectsReviewedPlanBeforeGeneration()
+    {
+        using var temporary = new TemporaryDirectory();
+        var templatePath = temporary.File("template.docx");
+        var historicalPath = temporary.File("historical.docx");
+        DocxTestPackage.Create(
+            templatePath,
+            [DocxTestPackage.Header + DocxTestPackage.EmptyRow],
+            marker: "TEMPLATE");
+        DocxTestPackage.Create(
+            historicalPath,
+            [DocxTestPackage.Header + DocxTestPackage.PersonRow("Alumno Uno", "MEDIDA")],
+            marker: "HISTORICAL",
+            source: true);
+        var prepared = await PrepareAsync(templatePath, historicalPath);
+        var changedInputs = new GenerationInputSet(
+            [.. prepared.Inputs.HistoricalDocumentPaths, temporary.File("added.docx")],
+            prepared.Inputs.RosterPdfPaths);
+        var service = new ClassGenerationExecutionService(
+            new DocxClassDocumentGenerator(),
+            new DocxClassGenerationValidator(new DocxDocumentReader()),
+            new GenerationBatchPublisher(),
+            new PhysicalFileStore(),
+            new StaticInputDiscovery(changedInputs));
+        var request = new ClassGenerationExecutionRequest(
+            prepared,
+            temporary.File("output"),
+            SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier));
+
+        await Assert.ThrowsAsync<PreparedInputsChangedException>(() =>
+            service.ExecuteAsync(request, CancellationToken.None));
+
+        Assert.False(Directory.Exists(request.OutputDirectory));
+    }
+
+    private sealed class StaticInputDiscovery(GenerationInputSet inputs) : IGenerationInputDiscovery
+    {
+        public Task<GenerationInputSet> DiscoverAsync(
+            string historicalDirectory,
+            string rosterDirectory,
+            string templatePath,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(inputs);
+        }
     }
 }
