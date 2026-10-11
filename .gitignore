@@ -12,6 +12,7 @@ publish/
 .idea/
 *.user
 TestResults/
+/release-desktop
 
 # Private local documents and generated results
 /assets/documents/
