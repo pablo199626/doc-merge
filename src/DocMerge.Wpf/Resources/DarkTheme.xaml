@@ -4,11 +4,22 @@
     <SolidColorBrush x:Key="SurfaceBrush" Color="#1B2536" />
     <SolidColorBrush x:Key="SurfaceAltBrush" Color="#222F43" />
     <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#29384E" />
+    <SolidColorBrush x:Key="SidebarHoverBrush" Color="#263B5B" />
+    <SolidColorBrush x:Key="SidebarPressedBrush" Color="#2E4A72" />
+    <SolidColorBrush x:Key="SidebarActiveForegroundBrush" Color="#78B0FF" />
+    <SolidColorBrush x:Key="TableAlternateRowBrush" Color="#1E2A3C" />
+    <SolidColorBrush x:Key="TableSeparatorBrush" Color="#314058" />
     <SolidColorBrush x:Key="TextBrush" Color="#F4F7FC" />
     <SolidColorBrush x:Key="MutedTextBrush" Color="#B2BED3" />
     <SolidColorBrush x:Key="BorderBrush" Color="#3C4A62" />
     <SolidColorBrush x:Key="AccentBrush" Color="#5B9DFF" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#203B63" />
+    <SolidColorBrush x:Key="PrimaryActionBrush" Color="#0866F5" />
+    <SolidColorBrush x:Key="PrimaryActionHoverBrush" Color="#075BD8" />
+    <SolidColorBrush x:Key="PrimaryActionPressedBrush" Color="#064DB8" />
+    <SolidColorBrush x:Key="PrimaryActionForegroundBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="PrimaryActionDisabledBrush" Color="#344157" />
+    <SolidColorBrush x:Key="PrimaryActionDisabledForegroundBrush" Color="#A8B4C8" />
     <SolidColorBrush x:Key="SelectionBrush" Color="#284A78" />
     <SolidColorBrush x:Key="InactiveSelectionBrush" Color="#28364B" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#5DD39E" />

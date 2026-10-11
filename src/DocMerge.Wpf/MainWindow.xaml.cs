@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -14,6 +15,7 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly Stopwatch _sidebarAnimationClock = new();
+    private readonly ReviewRowActivationTracker _reviewRowActivation = new();
     private bool _closeAfterCancellation;
     private bool _isSidebarAnimating;
     private double _sidebarFromWidth;
@@ -174,6 +176,110 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(new Action(() => RestoreDetailInvoker(invoker)));
     }
 
+    private void ReviewTableBorder_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var size = ReviewTableSurface.RenderSize;
+        ReviewTableSurface.Clip = size.Width > 0 && size.Height > 0
+            ? new RectangleGeometry(new Rect(size), radiusX: 9, radiusY: 9)
+            : null;
+    }
+
+    private void ReviewGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+        if (source is null || IsInteractiveReviewSource(source))
+        {
+            _reviewRowActivation.Reset();
+            return;
+        }
+
+        var row = FindVisualAncestor<DataGridRow>(source);
+        if (row?.Item is not StudentReviewViewModel student)
+        {
+            _reviewRowActivation.Reset();
+            return;
+        }
+
+        _reviewRowActivation.Begin(student, e.GetPosition(ReviewGrid));
+    }
+
+    private void ReviewGrid_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        _reviewRowActivation.Update(
+            e.GetPosition(ReviewGrid),
+            GetSystemDragThreshold());
+    }
+
+    private void ReviewGrid_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+        if (source is null || IsInteractiveReviewSource(source))
+        {
+            _reviewRowActivation.Reset();
+            return;
+        }
+
+        var row = FindVisualAncestor<DataGridRow>(source);
+        if (row?.Item is not StudentReviewViewModel releasedStudent)
+        {
+            _reviewRowActivation.Reset();
+            return;
+        }
+
+        var student = _reviewRowActivation.Complete(
+            releasedStudent,
+            e.GetPosition(ReviewGrid),
+            GetSystemDragThreshold());
+        if (student is null)
+        {
+            return;
+        }
+
+        ReviewGrid.SelectedItem = student;
+        row.Focus();
+        OpenStudentDetail(student);
+        e.Handled = true;
+    }
+
+    private void ReviewGrid_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter
+            || Keyboard.FocusedElement is DependencyObject focusedElement
+                && IsInteractiveReviewSource(focusedElement)
+            || ReviewGrid.SelectedItem is not StudentReviewViewModel student)
+        {
+            return;
+        }
+
+        OpenStudentDetail(student);
+        e.Handled = true;
+    }
+
+    private void OpenStudentDetail(StudentReviewViewModel student)
+    {
+        if (_viewModel.ShowStudentCommand.CanExecute(student))
+        {
+            _viewModel.ShowStudentCommand.Execute(student);
+        }
+    }
+
+    private bool IsInteractiveReviewSource(DependencyObject source) =>
+        FindVisualAncestor<ButtonBase>(source) is not null
+        || FindVisualAncestor<TextBoxBase>(source) is not null
+        || FindVisualAncestor<ComboBox>(source) is not null
+        || FindVisualAncestor<ScrollBar>(source) is not null
+        || FindVisualAncestor<Thumb>(source) is not null
+        || FindVisualAncestor<DataGridColumnHeader>(source) is not null;
+
+    private static Size GetSystemDragThreshold() => new(
+        SystemParameters.MinimumHorizontalDragDistance,
+        SystemParameters.MinimumVerticalDragDistance);
+
     private void ApplySidebarLayout(bool useAnimation)
     {
         var targetWidth = _viewModel.SidebarWidth;
@@ -297,6 +403,25 @@ public partial class MainWindow : Window
                 yield return descendant;
             }
         }
+    }
+
+    private static T? FindVisualAncestor<T>(DependencyObject source)
+        where T : DependencyObject
+    {
+        var current = source;
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private void ResetDropHighlight(object sender)

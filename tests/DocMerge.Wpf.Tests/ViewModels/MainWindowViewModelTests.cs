@@ -28,6 +28,21 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ContinueToGenerationCommand_PreparedReview_AdvancesWithoutPublishing()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+
+        Assert.True(viewModel.IsGenerationStep);
+        Assert.Null(viewModel.PublishedDirectory);
+        Assert.Null(viewModel.FinalStatus);
+    }
+
+    [Fact]
     public async Task FilterReview_StatusFilter_DoesNotChangeBatchSummary()
     {
         using var fixture = new ViewModelFixture();

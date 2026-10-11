@@ -213,7 +213,7 @@
                 ClipToBounds="True"
                 Background="{DynamicResource SurfaceBrush}"
                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
-                Padding="10">
+                Padding="8,10">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -246,7 +246,7 @@
                         automation:AutomationProperties.Name="Expandir o contraer menú">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="22" />
+                            <ColumnDefinition Width="28" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <ui:SymbolIcon FontSize="20">
@@ -261,7 +261,7 @@
                                 </Style>
                             </ui:SymbolIcon.Style>
                         </ui:SymbolIcon>
-                        <TextBlock Grid.Column="1" Text="Contraer menú" Margin="10,0,0,0"
+                        <TextBlock Grid.Column="1" Text="Contraer menú" Margin="8,0,0,0"
                                    VerticalAlignment="Center" TextWrapping="NoWrap"
                                    Style="{StaticResource SidebarLabel}" />
                     </Grid>
@@ -272,11 +272,11 @@
                         automation:AutomationProperties.Name="Generación de clases, sección activa">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="22" />
+                            <ColumnDefinition Width="28" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <ui:SymbolIcon Symbol="Home20" FontSize="20" />
-                        <TextBlock Grid.Column="1" Text="Generación de clases" Margin="10,0,0,0"
+                        <TextBlock Grid.Column="1" Text="Generación de clases" Margin="8,0,0,0"
                                    VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="NoWrap"
                                    Style="{StaticResource SidebarLabel}" />
                     </Grid>
@@ -307,7 +307,7 @@
                     </Button.ContextMenu>
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="22" />
+                            <ColumnDefinition Width="28" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <ui:SymbolIcon FontSize="20">
@@ -325,7 +325,7 @@
                                 </Style>
                             </ui:SymbolIcon.Style>
                         </ui:SymbolIcon>
-                        <StackPanel Grid.Column="1" Margin="10,0,0,0" Style="{StaticResource SidebarLabel}">
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource SidebarLabel}">
                             <TextBlock Text="Apariencia" FontWeight="SemiBold" TextWrapping="NoWrap" />
                             <TextBlock Text="{Binding ThemeSummary}" Style="{StaticResource MutedText}"
                                        FontSize="10" TextWrapping="NoWrap" />
@@ -864,31 +864,43 @@
                                              Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
                                  </Grid>
 
-                                <Grid Grid.Row="3">
+                                <Border x:Name="ReviewTableBorder" Grid.Row="3"
+                                        Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1" CornerRadius="10"
+                                        SizeChanged="ReviewTableBorder_SizeChanged">
+                                  <Grid x:Name="ReviewTableSurface" Background="{DynamicResource SurfaceBrush}">
                                     <DataGrid x:Name="ReviewGrid" ItemsSource="{Binding VisibleStudents}" AutoGenerateColumns="False"
-                                              MinWidth="0" HorizontalAlignment="Stretch"
-                                              EnableColumnVirtualization="True"
-                                              VirtualizingPanel.IsVirtualizing="True"
-                                              VirtualizingPanel.VirtualizationMode="Recycling">
+                                               MinWidth="0" HorizontalAlignment="Stretch"
+                                               EnableColumnVirtualization="True"
+                                               VirtualizingPanel.IsVirtualizing="True"
+                                               VirtualizingPanel.VirtualizationMode="Recycling"
+                                               PreviewMouseLeftButtonDown="ReviewGrid_PreviewMouseLeftButtonDown"
+                                               PreviewMouseMove="ReviewGrid_PreviewMouseMove"
+                                               PreviewMouseLeftButtonUp="ReviewGrid_PreviewMouseLeftButtonUp"
+                                               PreviewKeyDown="ReviewGrid_PreviewKeyDown">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="#" Binding="{Binding Ordinal}" Width="46"
+                                            <DataGridTextColumn Header="#" Binding="{Binding Ordinal}" Width="52"
+                                                                HeaderStyle="{StaticResource CenteredDataGridHeader}"
+                                                                ElementStyle="{StaticResource OrdinalDataGridTextElement}" />
+                                            <DataGridTextColumn Header="Nombre y apellidos" Binding="{Binding Name}" Width="2.15*" MinWidth="220"
+                                                                ElementStyle="{StaticResource NameDataGridTextElement}" />
+                                            <DataGridTextColumn Header="NIA" Binding="{Binding StudentNumber}" Width="110"
                                                                 ElementStyle="{StaticResource DataGridTextElement}" />
-                                            <DataGridTextColumn Header="Nombre y apellidos" Binding="{Binding Name}" Width="2.2*" MinWidth="230"
-                                                                ElementStyle="{StaticResource DataGridTextElement}" />
-                                            <DataGridTextColumn Header="NIA" Binding="{Binding StudentNumber}" Width="105"
-                                                                ElementStyle="{StaticResource DataGridTextElement}" />
-                                            <DataGridTemplateColumn Header="Estado" Width="1.5*" MinWidth="190">
+                                            <DataGridTemplateColumn Header="Estado" Width="1.65*" MinWidth="180">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <Border x:Name="StatusBadge" HorizontalAlignment="Left"
                                                                 Style="{StaticResource Pill}"
+                                                                ToolTip="{Binding Status}"
                                                                 Background="{DynamicResource SuccessSoftBrush}">
                                                             <StackPanel Orientation="Horizontal">
                                                                 <ui:SymbolIcon x:Name="StatusIcon" Symbol="CheckmarkCircle16" FontSize="14"
                                                                                Foreground="{DynamicResource SuccessBrush}" />
-                                                                <TextBlock x:Name="StatusText" Text="{Binding Status}" Margin="4,0,0,0"
-                                                                           Foreground="{DynamicResource SuccessBrush}" FontSize="12"
-                                                                           TextWrapping="NoWrap" />
+                                                                 <TextBlock x:Name="StatusText" Text="{Binding Status}" Margin="4,0,0,0"
+                                                                            Foreground="{DynamicResource SuccessBrush}" FontSize="12"
+                                                                            MaxWidth="140" TextTrimming="CharacterEllipsis"
+                                                                            TextWrapping="NoWrap" />
                                                             </StackPanel>
                                                         </Border>
                                                         <DataTemplate.Triggers>
@@ -920,7 +932,7 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Procedencia" Width="*" MinWidth="145">
+                                            <DataGridTemplateColumn Header="Procedencia" Width="1.2*" MinWidth="140">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Text="{Binding Source}" Style="{StaticResource DataGridTextElement}"
@@ -928,12 +940,17 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Detalle" Width="110">
+                                            <DataGridTemplateColumn Header="Detalle" Width="100">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
-                                                        <Button Content="Ver detalle" Padding="9,4" MinHeight="30"
+                                                        <Button Style="{StaticResource InlineDetailButton}"
+                                                                ToolTip="Abrir el detalle de este alumno"
+                                                                automation:AutomationProperties.Name="Abrir detalle del alumno"
                                                                 Command="{Binding DataContext.ShowStudentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                CommandParameter="{Binding}" />
+                                                                CommandParameter="{Binding}">
+                                                            <TextBlock Text="Ver detalle" TextWrapping="NoWrap"
+                                                                       Foreground="{DynamicResource AccentBrush}" />
+                                                        </Button>
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
@@ -960,13 +977,23 @@
                                                        Style="{StaticResource MutedText}" FontSize="12" Margin="0,3,0,0" />
                                         </StackPanel>
                                     </Border>
+                                  </Grid>
+                                </Border>
+                                <Grid Grid.Row="4" Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding VisibleStudentSummary}" Style="{StaticResource MutedText}" />
+                                        <TextBlock Text="{Binding ActiveFilterSummary, StringFormat= · {0}}" Margin="8,0,0,0"
+                                                   Foreground="{DynamicResource AccentBrush}"
+                                                   Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="Haz clic en una fila o pulsa Enter para ver el detalle"
+                                               Margin="12,0,0,0" Style="{StaticResource MutedText}"
+                                               FontSize="12" TextWrapping="NoWrap" />
                                 </Grid>
-                                 <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
-                                     <TextBlock Text="{Binding VisibleStudentSummary}" Style="{StaticResource MutedText}" />
-                                     <TextBlock Text="{Binding ActiveFilterSummary, StringFormat= · {0}}" Margin="8,0,0,0"
-                                                Foreground="{DynamicResource AccentBrush}"
-                                                Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
-                                 </StackPanel>
                             </Grid>
                         </Border>
                     </Grid>
@@ -979,10 +1006,16 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Button Content="Volver a archivos" Command="{Binding BackToFilesCommand}" />
+                        <TextBlock Grid.Column="1" Text="En el siguiente paso elegirás la carpeta de salida"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   MaxWidth="240" Margin="12,0" TextAlignment="Right"
+                                   Style="{StaticResource MutedText}" FontSize="12" />
                         <Button Grid.Column="2" Content="Ver incidencias del lote" Margin="8,0"
                                 Command="{Binding ShowAllIssuesCommand}" />
-                        <ui:Button Grid.Column="3" Content="Continuar a generación" Appearance="Primary"
-                                   Command="{Binding ContinueToGenerationCommand}" />
+                        <Button Grid.Column="3" Content="Generar" Style="{StaticResource PrimaryActionButton}"
+                                ToolTip="Continuar para elegir la carpeta de salida"
+                                automation:AutomationProperties.HelpText="En el siguiente paso elegirás la carpeta de salida"
+                                Command="{Binding ContinueToGenerationCommand}" />
                     </Grid>
                 </Grid>
 
@@ -1041,8 +1074,8 @@
                         </Grid.ColumnDefinitions>
                         <Button Content="Volver a revisión" Command="{Binding BackToReviewCommand}" />
                         <Button Grid.Column="2" Content="Cancelar" Margin="8,0" Command="{Binding CancelCommand}" />
-                        <ui:Button Grid.Column="3" Content="Generar documentos" Appearance="Primary"
-                                   Command="{Binding GenerateCommand}" />
+                        <Button Grid.Column="3" Content="Generar documentos" Style="{StaticResource PrimaryActionButton}"
+                                Command="{Binding GenerateCommand}" />
                     </Grid>
                 </Grid>
             </Grid>

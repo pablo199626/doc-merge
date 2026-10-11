@@ -243,7 +243,9 @@ Si se entrega ejecutable, publica para `win-x64`, prueba `--version`, simulació
 generación real y la opción 3 del asistente sin argumentos. Comprueba los hashes
 de las entradas privadas antes y después.
 
-La verificación del 11 de octubre de 2026 superó 119 pruebas (26 WPF), build sin
-avisos y formato limpio. `release-desktop/DocMerge.exe` conserva versión
+La verificación del 11 de octubre de 2026 superó 124 pruebas (31 WPF), build sin
+avisos y formato limpio. La revisión visual ficticia cubrió los temas claro y
+oscuro, las composiciones amplia y compacta a 1366×768, el lateral expandido,
+el CTA de transición y la tabla rediseñada. `release-desktop/DocMerge.exe` conserva versión
 `2.1.0.0`/`2.1.0`, tamaño 152.639.291 bytes y SHA-256
 `58bbdc51669b940a1f08929c8e730805fd1b904c7c1d04cef6a9ca242b610429`.
