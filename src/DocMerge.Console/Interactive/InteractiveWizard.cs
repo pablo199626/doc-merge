@@ -20,15 +20,44 @@ public sealed class InteractiveWizard
         ShowHeader();
         var selected = _console.ReadLine(Environment.NewLine + "Elige una opción [1]: ").Trim();
         selected = selected.Length == 0 ? "1" : selected;
-        if (selected is not ("1" or "2"))
+        if (selected is not ("1" or "2" or "3"))
         {
-            throw new CliUsageException("la opción debe ser 1 o 2");
+            throw new CliUsageException("la opción debe ser 1, 2 o 3");
+        }
+
+        if (selected == "3")
+        {
+            return CreateClassGenerationOptions(options);
         }
 
         var source = CleanPath(_console.ReadLine("Ruta del documento Word de origen: "));
         return selected == "2"
             ? CreateSortOptions(options, source)
             : CreateTransferOptions(options, source);
+    }
+
+    private CliOptions CreateClassGenerationOptions(CliOptions options)
+    {
+        var historicalDirectory = CleanPath(_console.ReadLine(
+            "Ruta de la carpeta con los documentos Word históricos: "));
+        var rosterDirectory = CleanPath(_console.ReadLine(
+            "Ruta de la carpeta con los listados PDF de las clases: "));
+        var templatePath = CleanPath(_console.ReadLine(
+            "Ruta de la plantilla Word vacía: "));
+        var outputDirectory = CleanPath(_console.ReadLine(
+            "Ruta de la carpeta nueva para los documentos generados: "));
+        var answer = _console.ReadLine(
+            "¿Solo simular sin crear los documentos? (s/n) [n]: ").Trim();
+        return options with
+        {
+            GenerateClasses = true,
+            HistoricalDirectory = historicalDirectory,
+            RosterDirectory = rosterDirectory,
+            TemplatePath = templatePath,
+            OutputDirectory = outputDirectory,
+            Simulate = AffirmativeAnswers.Contains(answer.ToLowerInvariant()),
+            IsInteractive = true,
+        };
     }
 
     private CliOptions CreateSortOptions(CliOptions options, string source)
@@ -72,6 +101,7 @@ public sealed class InteractiveWizard
         _console.WriteLine("==============");
         _console.WriteLine("1. Transferir personas usando un listado PDF");
         _console.WriteLine("2. Ordenar alfabéticamente un documento Word");
+        _console.WriteLine("3. Generar los documentos Word de las clases");
     }
 
     private static string CleanPath(string value)

@@ -4,12 +4,13 @@ public sealed class CliParser
 {
     private static readonly HashSet<string> FlagOptions =
     [
-        "--simular", "--force", "--help", "-h", "--version",
+        "--simular", "--force", "--help", "-h", "--version", "--generar-clases",
     ];
 
     private static readonly HashSet<string> ValueOptions =
     [
         "-o", "--output", "--destino", "--lista", "--orden", "--cabecera",
+        "--historicos", "--listas", "--plantilla", "--salida",
     ];
 
     public CliOptions Parse(IReadOnlyList<string> arguments)
@@ -87,6 +88,7 @@ public sealed class CliParser
         "--force" => options with { Force = true },
         "--help" or "-h" => options with { ShowHelp = true },
         "--version" => options with { ShowVersion = true },
+        "--generar-clases" => options with { GenerateClasses = true },
         _ => options,
     };
 
@@ -100,6 +102,10 @@ public sealed class CliParser
             "--lista" => options with { PdfList = value },
             "--orden" => options with { SortRule = value },
             "--cabecera" => options with { Header = value },
+            "--historicos" => options with { HistoricalDirectory = value },
+            "--listas" => options with { RosterDirectory = value },
+            "--plantilla" => options with { TemplatePath = value },
+            "--salida" => options with { OutputDirectory = value },
             _ => options,
         };
 

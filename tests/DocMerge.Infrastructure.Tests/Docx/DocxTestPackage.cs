@@ -13,6 +13,9 @@ internal static class DocxTestPackage
     internal const string Header =
         "<w:tr><w:tc><w:p/></w:tc><w:tc><w:p><w:r><w:t>Nombre y Apellidos</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Medidas</w:t></w:r></w:p></w:tc></w:tr>";
 
+    internal const string EmptyRow =
+        "<w:tr><w:tc><w:p/></w:tc><w:tc><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr>";
+
     internal static string PersonRow(string name, string measure, string extra = "")
     {
         return $"<w:tr>{extra}<w:tc><w:p/></w:tc><w:tc><w:p><w:pPr><w:pStyle w:val=\"EstiloPersona\"/></w:pPr><w:r><w:t>{name}</w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:pStyle w:val=\"EstiloPersona\"/><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"7\"/></w:numPr></w:pPr><w:hyperlink r:id=\"rId9\"><w:r><w:t>{measure}</w:t></w:r></w:hyperlink></w:p></w:tc></w:tr>";

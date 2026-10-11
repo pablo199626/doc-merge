@@ -1,4 +1,6 @@
+using DocMerge.Application.Generation;
 using DocMerge.Application.Transfer;
+using DocMerge.Domain.Sorting;
 
 namespace DocMerge.Console.Cli;
 
@@ -9,6 +11,12 @@ internal static class CliExecutionContextFactory
 
     internal static ExecutionContext Create(CliOptions options)
     {
+        if (options.GenerateClasses)
+        {
+            return CreateGenerationContext(options);
+        }
+
+        RejectGenerationOptions(options);
         if (string.IsNullOrEmpty(options.Source))
         {
             throw new CliUsageException("debes indicar un documento de entrada");
@@ -24,6 +32,59 @@ internal static class CliExecutionContextFactory
 
         ValidateDistinctOutput(options.Source, output, transferInputs);
         return new ExecutionContext(options, options.Source, output, transferInputs);
+    }
+
+    private static ExecutionContext CreateGenerationContext(CliOptions options)
+    {
+        if (options.Source is not null
+            || options.Destination is not null
+            || options.PdfList is not null
+            || options.Output is not null)
+        {
+            throw new CliUsageException(
+                "--generar-clases no se combina con source, -o, --destino ni --lista");
+        }
+
+        if (options.Force)
+        {
+            throw new CliUsageException(
+                "la generación de clases publica siempre en una carpeta nueva; no admite --force");
+        }
+
+        RequireExistingDirectory(options.HistoricalDirectory, "la carpeta de históricos no existe");
+        RequireExistingDirectory(options.RosterDirectory, "la carpeta de listados no existe");
+        RequireExistingFile(
+            options.TemplatePath,
+            DocxExtension,
+            "la plantilla no es un DOCX existente");
+        if (string.IsNullOrWhiteSpace(options.OutputDirectory))
+        {
+            throw new CliUsageException("debes indicar --salida para el lote generado");
+        }
+
+        var request = new ClassGenerationRequest(
+            options.HistoricalDirectory!,
+            options.RosterDirectory!,
+            options.TemplatePath!,
+            options.OutputDirectory,
+            options.Header);
+        var generationOptions = options.SortRule == SortingProfiles.DefaultIdentifier
+            ? options with { SortRule = SortingProfiles.CommaSeparatedIdentifier }
+            : options;
+        return new ExecutionContext(
+            generationOptions, options.TemplatePath!, options.OutputDirectory, null, request);
+    }
+
+    private static void RejectGenerationOptions(CliOptions options)
+    {
+        if (options.HistoricalDirectory is not null
+            || options.RosterDirectory is not null
+            || options.TemplatePath is not null
+            || options.OutputDirectory is not null)
+        {
+            throw new CliUsageException(
+                "--historicos, --listas, --plantilla y --salida requieren --generar-clases");
+        }
     }
 
     private static TransferInputs? BuildTransferInputs(CliOptions options)
@@ -84,10 +145,18 @@ internal static class CliExecutionContextFactory
         }
     }
 
-    private static void RequireExistingFile(string path, string extension, string description)
+    private static void RequireExistingFile(string? path, string extension, string description)
     {
         if (!string.Equals(Path.GetExtension(path), extension, StringComparison.OrdinalIgnoreCase)
             || !File.Exists(path))
+        {
+            throw new CliUsageException($"{description}: {path}");
+        }
+    }
+
+    private static void RequireExistingDirectory(string? path, string description)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
         {
             throw new CliUsageException($"{description}: {path}");
         }

@@ -13,4 +13,9 @@ public sealed record CliOptions(
     bool Force = false,
     bool ShowHelp = false,
     bool ShowVersion = false,
-    bool IsInteractive = false);
+    bool IsInteractive = false,
+    bool GenerateClasses = false,
+    string? HistoricalDirectory = null,
+    string? RosterDirectory = null,
+    string? TemplatePath = null,
+    string? OutputDirectory = null);

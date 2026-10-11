@@ -47,4 +47,27 @@ public sealed class CliParserTests
     {
         Assert.Throws<CliUsageException>(() => _parser.Parse(["--des", "destination.docx"]));
     }
+
+    [Fact]
+    public void Parse_ClassGenerationOptions_ReturnsDedicatedInputs()
+    {
+        var parser = new CliParser();
+
+        var result = parser.Parse(
+            [
+                "--generar-clases",
+                "--historicos", "history",
+                "--listas=rosters",
+                "--plantilla", "template.docx",
+                "--salida", "output",
+                "--simular",
+            ]);
+
+        Assert.True(result.GenerateClasses);
+        Assert.Equal("history", result.HistoricalDirectory);
+        Assert.Equal("rosters", result.RosterDirectory);
+        Assert.Equal("template.docx", result.TemplatePath);
+        Assert.Equal("output", result.OutputDirectory);
+        Assert.True(result.Simulate);
+    }
 }
