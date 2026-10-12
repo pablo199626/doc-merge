@@ -1,34 +1,38 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <SolidColorBrush x:Key="WindowBrush" Color="#F4F7FC" />
+    <SolidColorBrush x:Key="WindowBrush" Color="#F7F4EF" />
     <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="SurfaceAltBrush" Color="#F7F9FD" />
-    <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#EFF4FC" />
-    <SolidColorBrush x:Key="SidebarHoverBrush" Color="#E8F1FF" />
-    <SolidColorBrush x:Key="SidebarPressedBrush" Color="#D7E7FF" />
-    <SolidColorBrush x:Key="SidebarActiveForegroundBrush" Color="#075BD8" />
-    <SolidColorBrush x:Key="TableAlternateRowBrush" Color="#FBFCFE" />
-    <SolidColorBrush x:Key="TableSeparatorBrush" Color="#E7EDF7" />
-    <SolidColorBrush x:Key="TextBrush" Color="#101A45" />
-    <SolidColorBrush x:Key="MutedTextBrush" Color="#60709B" />
-    <SolidColorBrush x:Key="BorderBrush" Color="#D8E2F3" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#0866F5" />
-    <SolidColorBrush x:Key="AccentSoftBrush" Color="#E8F1FF" />
-    <SolidColorBrush x:Key="PrimaryActionBrush" Color="#0866F5" />
-    <SolidColorBrush x:Key="PrimaryActionHoverBrush" Color="#075BD8" />
-    <SolidColorBrush x:Key="PrimaryActionPressedBrush" Color="#064DB8" />
-    <SolidColorBrush x:Key="PrimaryActionForegroundBrush" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="PrimaryActionDisabledBrush" Color="#D8E2F3" />
-    <SolidColorBrush x:Key="PrimaryActionDisabledForegroundBrush" Color="#536282" />
-    <SolidColorBrush x:Key="SelectionBrush" Color="#D9E9FF" />
-    <SolidColorBrush x:Key="InactiveSelectionBrush" Color="#E8EEF7" />
+    <SolidColorBrush x:Key="SurfaceAltBrush" Color="#FAF7F2" />
+    <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#F5EBDD" />
+    <SolidColorBrush x:Key="SidebarHoverBrush" Color="#F8EBD8" />
+    <SolidColorBrush x:Key="SidebarPressedBrush" Color="#F1D8B5" />
+    <SolidColorBrush x:Key="SidebarActiveForegroundBrush" Color="#7A481B" />
+    <SolidColorBrush x:Key="TableAlternateRowBrush" Color="#FCFAF7" />
+    <SolidColorBrush x:Key="TableSeparatorBrush" Color="#E8E0D5" />
+    <SolidColorBrush x:Key="TextBrush" Color="#21180F" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#675B4E" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#DDD3C6" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#8A551F" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#F8EBD8" />
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#21180F" />
+    <SolidColorBrush x:Key="FocusBrush" Color="#8A551F" />
+    <SolidColorBrush x:Key="PrimaryActionBrush" Color="#C98A3F" />
+    <SolidColorBrush x:Key="PrimaryActionHoverBrush" Color="#D9A75E" />
+    <SolidColorBrush x:Key="PrimaryActionPressedBrush" Color="#E4B96F" />
+    <SolidColorBrush x:Key="PrimaryActionForegroundBrush" Color="#21180F" />
+    <SolidColorBrush x:Key="PrimaryActionDisabledBrush" Color="#E3DDD4" />
+    <SolidColorBrush x:Key="PrimaryActionDisabledForegroundBrush" Color="#655F58" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#F3DFC1" />
+    <SolidColorBrush x:Key="InactiveSelectionBrush" Color="#EEE8DF" />
+    <SolidColorBrush x:Key="InformationBrush" Color="#1D5F91" />
+    <SolidColorBrush x:Key="InformationSoftBrush" Color="#E8F2F8" />
     <SolidColorBrush x:Key="SuccessBrush" Color="#178B58" />
     <SolidColorBrush x:Key="SuccessSoftBrush" Color="#E8F7EF" />
     <SolidColorBrush x:Key="WarningBrush" Color="#A56300" />
     <SolidColorBrush x:Key="WarningSoftBrush" Color="#FFF4D6" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#C93636" />
     <SolidColorBrush x:Key="ErrorSoftBrush" Color="#FDE8E8" />
-    <SolidColorBrush x:Key="DisabledBrush" Color="#AAB4C8" />
+    <SolidColorBrush x:Key="DisabledBrush" Color="#958B7F" />
     <SolidColorBrush x:Key="TemplateAccentBrush" Color="#7C3AED" />
     <SolidColorBrush x:Key="TemplateAccentSoftBrush" Color="#F0E8FF" />
     <SolidColorBrush x:Key="OverlayBrush" Color="#520B1220" />

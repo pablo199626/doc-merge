@@ -13,6 +13,15 @@ namespace DocMerge.Wpf.Tests.ViewModels;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
+    public void Version_DesktopAssembly_UsesCommercialVersion()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+
+        Assert.Equal("1.0.0", viewModel.Version);
+    }
+
+    [Fact]
     public async Task AnalyzeCommand_ValidInputs_AdvancesToReadOnlyReview()
     {
         using var fixture = new ViewModelFixture();
@@ -112,7 +121,7 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.HistoricalInput.HasSelection);
         Assert.False(viewModel.RosterInput.HasSelection);
         Assert.True(viewModel.TemplateInput.IsBundled);
-        Assert.Equal("Incluida con DocMerge", viewModel.TemplateInput.DisplayLocation);
+        Assert.Equal("Incluida con Talos", viewModel.TemplateInput.DisplayLocation);
         Assert.Null(viewModel.GenerationResult);
         Assert.Null(viewModel.OutputParent);
         Assert.Equal("Clases generadas", viewModel.OutputFolderName);
@@ -349,7 +358,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(DesktopWorkflowState.AnalysisCancelled, viewModel.WorkflowState);
         Assert.False(viewModel.IsBusy);
         Assert.True(viewModel.TemplateInput.IsBundled);
-        Assert.Equal("Incluida con DocMerge", viewModel.TemplateInput.DisplayLocation);
+        Assert.Equal("Incluida con Talos", viewModel.TemplateInput.DisplayLocation);
         Assert.Equal(InputSelectionState.Selected, viewModel.TemplateInput.State);
     }
 
