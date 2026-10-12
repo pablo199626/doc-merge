@@ -234,11 +234,11 @@ internal static class StudentReviewText
         HistoricalResolutionType.EquivalentMatches =>
             "Se copiará una representación segura de los históricos equivalentes.",
         HistoricalResolutionType.MissingHistoricalStudent =>
-            "Se escribirá el nombre del PDF; las demás columnas quedarán vacías y señalizadas.",
+            "Se escribirá el nombre del PDF; las demás columnas quedarán vacías.",
         HistoricalResolutionType.ConflictingHistoricalData =>
-            "No se copiará información dudosa. Se escribirá el nombre del PDF y se señalizarán las columnas vacías.",
+            "No se copiará información dudosa. Se escribirá el nombre del PDF y las demás columnas quedarán vacías.",
         HistoricalResolutionType.AmbiguousStudentIdentity =>
-            "No se elegirá ningún candidato. Se escribirá el nombre del PDF y se señalizarán las columnas vacías.",
+            "No se elegirá ningún candidato. Se escribirá el nombre del PDF y las demás columnas quedarán vacías.",
         _ => throw new InvalidOperationException("Resolución histórica no reconocida."),
     };
 

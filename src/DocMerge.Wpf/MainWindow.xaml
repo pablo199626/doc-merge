@@ -271,7 +271,9 @@
                     </Grid>
                 </Button>
 
-                <Button Grid.Row="2" Margin="0,10,0,0" Style="{StaticResource SidebarActiveButton}"
+                <Border Grid.Row="2" Margin="0,10,0,0" MinWidth="44" MinHeight="44" Padding="9,8"
+                        Background="{DynamicResource AccentSoftBrush}" CornerRadius="8"
+                        TextElement.Foreground="{DynamicResource SidebarActiveForegroundBrush}"
                         ToolTip="Generación de clases"
                         automation:AutomationProperties.Name="Generación de clases, sección activa">
                     <Grid>
@@ -284,7 +286,7 @@
                                    VerticalAlignment="Center" FontWeight="SemiBold" TextWrapping="NoWrap"
                                    Style="{StaticResource SidebarLabel}" />
                     </Grid>
-                </Button>
+                </Border>
 
                 <Button x:Name="ThemeMenuButton" Grid.Row="4" Margin="0,0,0,8"
                         Style="{StaticResource SidebarActionButton}"
@@ -496,8 +498,9 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <StackPanel Margin="6,0,6,15">
-                        <TextBlock Text="Selecciona los archivos de entrada" Style="{StaticResource Heading}" />
-                        <TextBlock Text="Carga las tres fuentes necesarias. Los PDF determinan la pertenencia a cada clase."
+                        <TextBlock x:Name="SelectionHeading" Text="Selecciona los archivos de entrada"
+                                   Style="{StaticResource Heading}" Focusable="True" />
+                        <TextBlock Text="{Binding SelectionIntroduction}"
                                    Style="{StaticResource MutedText}" Margin="0,3,0,0" />
                     </StackPanel>
                     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -540,9 +543,10 @@
                                        automation:AutomationProperties.LiveSetting="Assertive" />
                             <TextBlock Text="{Binding ProgressText}" Style="{StaticResource MutedText}" />
                         </StackPanel>
-                        <Button Grid.Column="1" Content="Cancelar" Margin="8,0" Command="{Binding CancelCommand}" />
-                        <ui:Button Grid.Column="2" Content="Analizar y continuar" Appearance="Primary"
-                                   Command="{Binding AnalyzeCommand}" />
+                        <Button Grid.Column="1" Content="Cancelar análisis" Margin="8,0" Command="{Binding CancelCommand}"
+                                Visibility="{Binding CanCancelAnalysis, Converter={StaticResource BooleanVisibility}}" />
+                        <Button Grid.Column="2" Content="{Binding AnalysisActionText}"
+                                Style="{StaticResource PrimaryActionButton}" Command="{Binding AnalyzeCommand}" />
                     </Grid>
                 </Grid>
 
@@ -1019,21 +1023,22 @@
                                    HorizontalAlignment="Right" VerticalAlignment="Center"
                                    MaxWidth="240" Margin="12,0" TextAlignment="Right"
                                    Style="{StaticResource MutedText}" FontSize="12" />
-                        <Button Grid.Column="2" Content="Ver incidencias del lote" Margin="8,0"
+                        <Button Grid.Column="2" Content="Ver todas las incidencias" Margin="8,0"
                                 Command="{Binding ShowAllIssuesCommand}" />
-                        <Button Grid.Column="3" Content="Generar" Style="{StaticResource PrimaryActionButton}"
-                                ToolTip="Continuar para elegir la carpeta de salida"
-                                automation:AutomationProperties.HelpText="En el siguiente paso elegirás la carpeta de salida"
+                        <Button Grid.Column="3" Content="Configurar documentos" Style="{StaticResource PrimaryActionButton}"
+                                ToolTip="Continuar para configurar las cabeceras y la ubicación de salida"
+                                automation:AutomationProperties.HelpText="No genera archivos; abre la configuración de salida"
                                 Command="{Binding ContinueToGenerationCommand}" />
                     </Grid>
                 </Grid>
 
-                <Grid Visibility="{Binding IsGenerationStep, Converter={StaticResource BooleanVisibility}}">
+                <Grid x:Name="GenerationStep" Visibility="{Binding IsGenerationStep, Converter={StaticResource BooleanVisibility}}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Visibility="{Binding IsConfigurationVisible, Converter={StaticResource BooleanVisibility}}">
                         <StackPanel>
                             <UniformGrid Columns="3" Margin="0,0,0,10">
                                 <UniformGrid.Style>
@@ -1112,7 +1117,7 @@
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Text="Clase detectada" FontWeight="SemiBold" Margin="10,8" />
-                                                <TextBlock Grid.Column="1" Text="Nombre que aparecerá en el documento" FontWeight="SemiBold" Margin="10,8" />
+                                                <TextBlock Grid.Column="1" Text="Nombre visible de la clase" FontWeight="SemiBold" Margin="10,8" />
                                                 <TextBlock Grid.Column="2" Text="Tutor/a (opcional)" FontWeight="SemiBold" Margin="10,8" />
                                             </Grid>
                                             <ItemsControl Grid.Row="1" ItemsSource="{Binding ClassHeaders}">
@@ -1159,7 +1164,7 @@
                                                     <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,4">
                                                         <StackPanel>
                                                             <TextBlock Text="{Binding DetectedClass}" FontWeight="SemiBold" />
-                                                            <TextBlock Text="Nombre que aparecerá en el documento" Margin="0,8,0,4" />
+                                                            <TextBlock Text="Nombre visible de la clase" Margin="0,8,0,4" />
                                                             <TextBox IsEnabled="{Binding IsEditable}"
                                                                      Text="{Binding DisplayTitle, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                                                             <TextBlock Text="{Binding TitleError}" Foreground="{DynamicResource ErrorBrush}"
@@ -1198,18 +1203,22 @@
                                         </Style>
                                     </Border.Style>
                                     <StackPanel>
-                                        <TextBlock Text="Carpeta de salida" Style="{StaticResource SectionHeading}" />
+                                        <TextBlock Text="Ubicación de los documentos" Style="{StaticResource SectionHeading}" />
+                                        <TextBlock Text="Guardar dentro de" Margin="0,10,0,4" />
                                         <Grid Margin="0,12,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <TextBox Text="{Binding OutputParent, Mode=OneWay}" IsReadOnly="True" />
-                                            <Button Grid.Column="1" Content="Examinar…" Margin="8,0,0,0" Command="{Binding BrowseOutputCommand}" />
+                                            <Button Grid.Column="1" Content="Elegir carpeta…" Margin="8,0,0,0" Command="{Binding BrowseOutputCommand}" />
                                         </Grid>
-                                        <TextBlock Text="Nombre de la carpeta nueva" Margin="0,10,0,4" />
+                                        <TextBlock Text="Nombre de la nueva carpeta" Margin="0,10,0,4" />
                                         <TextBox Text="{Binding OutputFolderName, UpdateSourceTrigger=PropertyChanged}" />
-                                        <TextBlock Text="{Binding OutputDirectory}" Margin="0,8,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                                        <TextBlock Text="Ubicación final" Margin="0,10,0,2" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding OutputDirectory}" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                                        <TextBlock Text="Se creará una carpeta nueva. No se sobrescribirán documentos existentes."
+                                                   Margin="0,7,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding OutputError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,5,0,0" />
                                     </StackPanel>
                                 </Border>
@@ -1233,13 +1242,63 @@
                                         <TextBlock Text="{Binding ProgressText}" Margin="0,12,0,0" />
                                         <TextBlock Text="{Binding FinalStatus}" Margin="0,8,0,0" FontWeight="SemiBold"
                                                    TextWrapping="Wrap" automation:AutomationProperties.LiveSetting="Polite" />
-                                        <Button Content="Abrir carpeta de salida" Margin="0,10,0,0" HorizontalAlignment="Left"
-                                                Command="{Binding OpenOutputCommand}" />
                                     </StackPanel>
                                 </Border>
                             </Grid>
                         </StackPanel>
                     </ScrollViewer>
+                    <Border Grid.Row="0" Margin="5" Style="{StaticResource Card}"
+                            Visibility="{Binding IsGenerationOperationVisible, Converter={StaticResource BooleanVisibility}}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="560">
+                            <ProgressBar IsIndeterminate="True" Height="4" MinWidth="360" Margin="0,0,0,20" />
+                            <TextBlock Text="{Binding OperationActionText}" Style="{StaticResource Heading}"
+                                       HorizontalAlignment="Center"
+                                       automation:AutomationProperties.LiveSetting="Polite" />
+                            <TextBlock Text="{Binding ProgressText}" Margin="0,8,0,0" TextAlignment="Center"
+                                       Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                            <TextBlock Text="DocMerge terminará la operación o su limpieza antes de permitir otra acción."
+                                       Margin="0,12,0,0" TextAlignment="Center" Style="{StaticResource MutedText}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Row="0" Margin="5" Style="{StaticResource Card}"
+                            Visibility="{Binding IsGenerationCompleted, Converter={StaticResource BooleanVisibility}}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel MaxWidth="760" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="CheckmarkCircle24" FontSize="44"
+                                               Foreground="{DynamicResource SuccessBrush}" HorizontalAlignment="Center" />
+                                <TextBlock x:Name="ResultHeading" Text="Documentos generados correctamente"
+                                           Style="{StaticResource Heading}" Focusable="True"
+                                           FontSize="24" Margin="0,14,0,0" TextAlignment="Center"
+                                           automation:AutomationProperties.LiveSetting="Polite" />
+                                <TextBlock Text="{Binding GenerationResult.Summary}" Margin="0,8,0,0"
+                                           TextAlignment="Center" TextWrapping="Wrap" />
+                                <Border Margin="0,18,0,0" Padding="14" Background="{DynamicResource SurfaceAltBrush}"
+                                        CornerRadius="8">
+                                    <StackPanel>
+                                        <TextBlock Text="Guardados en" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding GenerationResult.OutputDirectory}" Margin="0,5,0,0"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding OutputOpenError}" Foreground="{DynamicResource ErrorBrush}"
+                                                   Margin="0,7,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Margin="0,12,0,0" Padding="12" Background="{DynamicResource WarningSoftBrush}"
+                                        CornerRadius="8"
+                                        Visibility="{Binding HasResultIssues, Converter={StaticResource BooleanVisibility}}">
+                                    <TextBlock Text="La generación contiene avisos que puedes consultar. Los alumnos sin información histórica, con coincidencias ambiguas o con históricos contradictorios se incluyen con el nombre del listado y los demás campos vacíos."
+                                               TextWrapping="Wrap" />
+                                </Border>
+                                <Expander Header="Resumen de los documentos" Margin="0,12,0,0">
+                                    <StackPanel Margin="12,8,0,0">
+                                        <TextBlock Text="{Binding GenerationResult.TemplateName, StringFormat=Plantilla: {0}}" />
+                                        <TextBlock Text="{Binding GenerationResult.HeaderSummary}" Margin="0,6,0,0"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
                     <Grid Grid.Row="1" Margin="6,12,6,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -1247,10 +1306,31 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Button Content="Volver a revisión" Command="{Binding BackToReviewCommand}" />
-                        <Button Grid.Column="2" Content="Cancelar" Margin="8,0" Command="{Binding CancelCommand}" />
+                        <Button Content="Volver a revisión" Command="{Binding BackToReviewCommand}"
+                                Visibility="{Binding IsConfigurationVisible, Converter={StaticResource BooleanVisibility}}" />
+                        <Button Grid.Column="2" Content="Cancelar generación" Margin="8,0" Command="{Binding CancelCommand}"
+                                Visibility="{Binding CanCancelGeneration, Converter={StaticResource BooleanVisibility}}" />
                         <Button Grid.Column="3" Content="Generar documentos" Style="{StaticResource PrimaryActionButton}"
-                                Click="GenerateButton_Click" />
+                                Command="{Binding GenerateCommand}"
+                                Visibility="{Binding IsConfigurationVisible, Converter={StaticResource BooleanVisibility}}" />
+                        <Button Grid.Column="3" Content="{Binding OperationActionText}" IsEnabled="False"
+                                Style="{StaticResource PrimaryActionButton}"
+                                Visibility="{Binding IsGenerationOperationVisible, Converter={StaticResource BooleanVisibility}}" />
+                        <Grid Grid.Column="0" Grid.ColumnSpan="4"
+                              Visibility="{Binding IsGenerationCompleted, Converter={StaticResource BooleanVisibility}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button Content="Nueva generación" Command="{Binding NewGenerationCommand}" />
+                            <Button Grid.Column="2" Content="Ver todas las incidencias" Margin="8,0"
+                                    Command="{Binding ShowAllIssuesCommand}"
+                                    Visibility="{Binding HasResultIssues, Converter={StaticResource BooleanVisibility}}" />
+                            <Button Grid.Column="3" Content="Abrir carpeta de salida"
+                                    Style="{StaticResource PrimaryActionButton}" Command="{Binding OpenOutputCommand}" />
+                        </Grid>
                     </Grid>
                 </Grid>
             </Grid>

@@ -55,7 +55,9 @@ consumidos tanto por consola como por WPF.
 ## Interfaz WPF
 
 `src/DocMerge.Wpf/` implementa un flujo MVVM de tres pasos: selección y análisis,
-revisión de solo lectura y generación. Expone el NIA, la procedencia histórica,
+revisión de solo lectura y configuración/generación. El paso de revisión continúa
+con «Configurar documentos» y nunca escribe archivos; «Generar documentos» es la
+única acción que ejecuta el lote. Expone el NIA, la procedencia histórica,
 los campos legibles y las incidencias globales o asociadas a clase/alumno. No
 renderiza Word/PDF ni permite editar o resolver manualmente los datos.
 La presentación usa controles y temas Fluent de WPF UI 4.3.0, manteniendo en
@@ -94,12 +96,27 @@ Antes de generar y antes de publicar compara de nuevo el conjunto descubierto y
 los hashes. Las carpetas temporales `.docmerge_*` quedan fuera del descubrimiento
 para que una salida situada dentro del árbol histórico no invalide su propio plan.
 
+La WPF representa la sesión mediante un estado exclusivo. Cancelar solo aparece
+mientras la operación puede aceptar la solicitud; después muestra «Cancelando…»
+y espera al retorno y limpieza reales. Al entrar en guardado final deja de ofrecer
+cancelación. Si el movimiento atómico ya terminó, el resultado sigue siendo éxito
+aunque exista una solicitud tardía: nunca se eliminan documentos finales para
+simular una cancelación. Cerrar la ventana durante una operación aplica la misma
+espera y los intentos de cierre repetidos no eluden la limpieza.
+
 El tercer paso permite editar, para todas las clases, un título visible y el
 tutor o tutora opcional. Los valores se asocian a `ClassIdentifier`, no al texto
 editable ni a la posición de una fila, y se capturan en una instantánea antes de
 ejecutar. Navegar entre revisión y generación conserva el borrador; cambiar una
 entrada invalida el plan y reinicia las cabeceras al volver a analizar. Esta
 edición no relee alumnado ni modifica el matching.
+
+Un resultado confirmado sustituye el formulario por un resumen inmutable de la
+ejecución: documentos, alumnado, incidencias, cabeceras y ruta proceden de la
+solicitud y el resultado ejecutados. Un fallo al abrir esa carpeta se presenta por
+separado y no invalida la generación. «Nueva generación» vacía históricos, PDF,
+salida, filtros, cabeceras y resultado, restaura la plantilla incluida y conserva
+solo las preferencias visuales. No modifica ni elimina archivos del usuario.
 
 La WPF selecciona inicialmente la «Plantilla estándar de DocMerge». Su identidad
 incluida y su estado de validación documental se muestran por separado. Puede
@@ -245,8 +262,9 @@ Bloquean la publicación los problemas estructurales, incluidos:
   valores de cabecera de salida descritos arriba.
 - Los conflictos se representan mediante modelos e incidencias estructuradas;
   la interfaz los explica, pero no permite elegir o editar una resolución.
-- El CLI genera filas vacías señalizadas para ausencias, contradicciones y
-  homónimos; nunca elige información dudosa.
+- El CLI y la WPF generan filas neutras con los campos históricos vacíos para
+  ausencias, contradicciones y homónimos; nunca eligen información dudosa ni
+  añaden sombreado especial.
 - No se exporta aún un informe JSON independiente. La fuente reutilizable para
   una UI es `ClassGenerationPlan` junto con sus `GenerationIssue`.
 - Los PDF sin total independiente conservan la limitación documentada aunque
@@ -258,10 +276,9 @@ Bloquean la publicación los problemas estructurales, incluidos:
 - La versión sigue siendo `2.1.0`; no la incrementes sin autorización expresa.
 - La entrega WPF validada está en `release-desktop/DocMerge.exe`; la entrega de
   consola permanece separada e intacta en `release/DocMerge.exe`.
-- El pulido visual descrito en este documento está validado desde código fuente,
-  pero no se ha republicado. El hash documentado de `release-desktop/DocMerge.exe`
-  corresponde a la entrega anterior y no acredita estos últimos cambios hasta
-  que se solicite, publique y pruebe una nueva entrega.
+- El pulido visual y de estados descrito en este documento está publicado en la
+  entrega WPF actual. La prueba aislada confirmó que no necesita una plantilla
+  instalada junto al ejecutable: materializa y verifica el recurso incrustado.
 - Se validaron visualmente selección a 1366×768 y revisión amplia y compacta con
   el corpus real. Una ejecución integral mediante la composición WPF publicó y
   validó los cuatro documentos esperados sin modificar las entradas.
@@ -304,8 +321,8 @@ de las entradas privadas antes y después.
 La verificación del 11 de octubre de 2026 superó 124 pruebas (31 WPF), build sin
 avisos y formato limpio. La revisión visual ficticia cubrió los temas claro y
 oscuro, las composiciones amplia y compacta a 1366×768, el lateral expandido,
-el CTA de transición y la tabla rediseñada. `release-desktop/DocMerge.exe` conserva versión
-`2.1.0.0`/`2.1.0`, tamaño 152.639.291 bytes y SHA-256
+el CTA de transición y la tabla rediseñada. Aquella entrega histórica tenía
+tamaño 152.639.291 bytes y SHA-256
 `58bbdc51669b940a1f08929c8e730805fd1b904c7c1d04cef6a9ca242b610429`.
 
 La ampliación de cabeceras y plantilla incluida se verificó desde fuente el 12 de
@@ -319,3 +336,20 @@ superaron las comprobaciones ZIP y de compatibilidad XML. No se publicó un
 ejecutable nuevo. El entorno sigue sin Word o LibreOffice accesible para
 automatizar la inspección visual, que permanece como comprobación manual
 pendiente antes de distribuir una nueva entrega.
+
+El pulido final de estados WPF del 12 de octubre de 2026 elevó la suite a 148
+pruebas: Domain 40, Application 15, Infrastructure 43, Console 10 y WPF 40. Cubre
+reutilización del plan al volver, resultado inmutable, reinicio de sesión,
+cancelación de análisis conservando la plantilla incluida y la frontera de
+guardado que mantiene como éxito una publicación completada. La validación
+visual/manual exhaustiva de estos estados sigue separada de las pruebas
+automatizadas.
+
+La entrega WPF se republicó el 12 de octubre de 2026 mediante `dotnet publish`
+autocontenido para Windows x64. `release-desktop/DocMerge.exe` conserva versión
+`2.1.0.0`/`2.1.0`, tiene tamaño 152.782.139 bytes y SHA-256
+`1e68636d1f6953998f9e0b3953e6b1ce61e10cf3b105a8444cbc77d3f3832761`. Una copia
+aislada que contenía solo el ejecutable arrancó, materializó la plantilla incluida
+con el hash oficial, cerró con código 0 y eliminó su directorio temporal. No
+dependió del repositorio, de una plantilla vecina ni de una instalación previa de
+.NET.

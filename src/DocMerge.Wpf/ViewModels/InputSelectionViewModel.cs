@@ -198,7 +198,11 @@ public sealed class InputSelectionViewModel : ViewModelBase
     {
         IsBusy = false;
         Count = count;
-        Status = count.HasValue ? $"Comprobado · {count.Value} archivos" : "Comprobado";
+        Status = count.HasValue
+            ? $"Analizada · {count.Value} {(count.Value == 1 ? "documento" : "documentos")}"
+            : IsBundled
+                ? "Incluida con DocMerge · analizada"
+                : "Plantilla externa · analizada";
         State = InputSelectionState.Validated;
     }
 

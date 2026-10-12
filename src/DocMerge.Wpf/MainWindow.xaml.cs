@@ -16,7 +16,8 @@ public partial class MainWindow : Window
     private readonly MainWindowViewModel _viewModel;
     private readonly Stopwatch _sidebarAnimationClock = new();
     private readonly ReviewRowActivationTracker _reviewRowActivation = new();
-    private bool _closeAfterCancellation;
+    private bool _isClosePending;
+    private bool _isCloseAuthorized;
     private bool _isSidebarAnimating;
     private double _sidebarFromWidth;
     private double _sidebarToWidth;
@@ -31,14 +32,16 @@ public partial class MainWindow : Window
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         DataContext = viewModel;
         viewModel.DetailRequested += ShowDetail;
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     /// <inheritdoc />
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!_viewModel.IsBusy || _closeAfterCancellation)
+        if (!_viewModel.IsBusy || _isCloseAuthorized)
         {
             _viewModel.DetailRequested -= ShowDetail;
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
             StopSidebarAnimation();
             base.OnClosing(e);
@@ -46,6 +49,24 @@ public partial class MainWindow : Window
         }
 
         e.Cancel = true;
+        if (_isClosePending)
+        {
+            return;
+        }
+
+        if (!_viewModel.CanCancelOperation)
+        {
+            MessageBox.Show(
+                this,
+                "DocMerge está guardando o terminando una operación. La ventana se cerrará cuando finalice de forma segura.",
+                "Operación en curso",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            _isClosePending = true;
+            CloseAfterOperationAsync();
+            return;
+        }
+
         var decision = MessageBox.Show(
             this,
             "Hay una operación en curso. ¿Deseas cancelarla y cerrar cuando termine de limpiarse?",
@@ -57,20 +78,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        _closeAfterCancellation = true;
+        _isClosePending = true;
         _viewModel.CancelOperation();
-        _viewModel.PropertyChanged += CloseWhenReady;
+        CloseAfterOperationAsync();
     }
 
-    private void CloseWhenReady(object? sender, PropertyChangedEventArgs e)
+    private async void CloseAfterOperationAsync()
     {
-        if (e.PropertyName != nameof(MainWindowViewModel.IsBusy) || _viewModel.IsBusy)
+        await _viewModel.WaitForActiveOperationAsync();
+        if (!IsLoaded)
         {
             return;
         }
 
-        _viewModel.PropertyChanged -= CloseWhenReady;
-        Dispatcher.BeginInvoke(Close);
+        _isCloseAuthorized = true;
+        Close();
     }
 
     private void InputCard_DragEnter(object sender, DragEventArgs e)
@@ -123,19 +145,6 @@ public partial class MainWindow : Window
         await _viewModel.InitializeAsync();
     }
 
-    private void GenerateButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (Keyboard.FocusedElement is TextBox textBox)
-        {
-            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-        }
-
-        if (_viewModel.GenerateCommand.CanExecute(parameter: null))
-        {
-            _viewModel.GenerateCommand.Execute(parameter: null);
-        }
-    }
-
     private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         _viewModel.UpdateWindowWidth(e.NewSize.Width);
@@ -156,6 +165,41 @@ public partial class MainWindow : Window
         ApplySidebarLayout(useAnimation: true);
         SidebarToggleButton.Focus();
         e.Handled = true;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainWindowViewModel.WorkflowState))
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(FocusCurrentWorkflowState);
+    }
+
+    private void FocusCurrentWorkflowState()
+    {
+        switch (_viewModel.WorkflowState)
+        {
+            case DesktopWorkflowState.Selecting:
+            case DesktopWorkflowState.AnalysisCancelled:
+            case DesktopWorkflowState.AnalysisFailed:
+                SelectionHeading.Focus();
+                return;
+            case DesktopWorkflowState.Reviewing:
+                ReviewGrid.Focus();
+                return;
+            case DesktopWorkflowState.Configuring:
+            case DesktopWorkflowState.GenerationCancelled:
+            case DesktopWorkflowState.GenerationFailed:
+                FindVisualChildren<TextBox>(GenerationStep)
+                    .FirstOrDefault(textBox => textBox.IsVisible && textBox.IsEnabled)
+                    ?.Focus();
+                return;
+            case DesktopWorkflowState.Completed:
+                ResultHeading.Focus();
+                return;
+        }
     }
 
     private void SidebarToggleButton_Click(object sender, RoutedEventArgs e)
@@ -184,10 +228,17 @@ public partial class MainWindow : Window
 
     private void ShowDetail(object? sender, DetailRequestedEventArgs e)
     {
+        var session = _viewModel.SessionSequence;
         var invoker = Keyboard.FocusedElement;
         var dialog = new DetailWindow(e.Title, e.Body) { Owner = this };
         dialog.ShowDialog();
-        Dispatcher.BeginInvoke(new Action(() => RestoreDetailInvoker(invoker)));
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (session == _viewModel.SessionSequence)
+            {
+                RestoreDetailInvoker(invoker);
+            }
+        }));
     }
 
     private void ReviewTableBorder_SizeChanged(object sender, SizeChangedEventArgs e)

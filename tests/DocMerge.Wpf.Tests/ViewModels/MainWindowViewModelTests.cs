@@ -43,6 +43,84 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task BackToFilesCommand_UnchangedInputs_ReusesPreparedReview()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        var originalClass = Assert.Single(viewModel.Classes);
+
+        viewModel.BackToFilesCommand.Execute(parameter: null);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+
+        Assert.Same(originalClass, Assert.Single(viewModel.Classes));
+        Assert.Equal(1, fixture.RosterReadCount);
+        Assert.Equal(DesktopWorkflowState.Reviewing, viewModel.WorkflowState);
+    }
+
+    [Fact]
+    public async Task GenerateCommand_ValidConfiguration_CreatesConfirmedImmutableResult()
+    {
+        using var fixture = new ViewModelFixture { TemplateSupportsHeader = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+        var header = Assert.Single(viewModel.ClassHeaders);
+        header.DisplayTitle = "Segundo A";
+        header.TutorName = "María Pérez";
+        viewModel.BrowseOutputCommand.Execute(parameter: null);
+
+        await viewModel.GenerateCommand.ExecuteAsync();
+
+        Assert.Equal(DesktopWorkflowState.Completed, viewModel.WorkflowState);
+        Assert.True(viewModel.IsGenerationCompleted);
+        Assert.False(viewModel.IsConfigurationVisible);
+        Assert.Equal("Segundo A", viewModel.GenerationResult!.Headers.Single().Value.DisplayTitle);
+        Assert.Equal("María Pérez", viewModel.GenerationResult.Headers.Single().Value.TutorName);
+        Assert.Equal(1, fixture.PublishCount);
+    }
+
+    [Fact]
+    public async Task NewGenerationCommand_CompletedResult_ResetsSessionAndRestoresBundledTemplate()
+    {
+        using var fixture = new ViewModelFixture
+        {
+            TemplateSupportsHeader = true,
+            BlockBundledTemplate = true,
+        };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+        viewModel.BrowseOutputCommand.Execute(parameter: null);
+        await viewModel.GenerateCommand.ExecuteAsync();
+        viewModel.SearchText = "old";
+        var previousSession = viewModel.SessionSequence;
+
+        var reset = viewModel.NewGenerationCommand.ExecuteAsync();
+        await fixture.BundledTemplateRequested.Task;
+        var safeCloseWait = viewModel.WaitForActiveOperationAsync();
+        Assert.False(safeCloseWait.IsCompleted);
+        fixture.AllowBundledTemplate.TrySetResult();
+        await reset;
+        await safeCloseWait;
+
+        Assert.Equal(previousSession + 1, viewModel.SessionSequence);
+        Assert.Equal(DesktopWorkflowState.Selecting, viewModel.WorkflowState);
+        Assert.False(viewModel.HistoricalInput.HasSelection);
+        Assert.False(viewModel.RosterInput.HasSelection);
+        Assert.True(viewModel.TemplateInput.IsBundled);
+        Assert.Equal("Incluida con DocMerge", viewModel.TemplateInput.DisplayLocation);
+        Assert.Null(viewModel.GenerationResult);
+        Assert.Null(viewModel.OutputParent);
+        Assert.Equal("Clases generadas", viewModel.OutputFolderName);
+        Assert.Equal(string.Empty, viewModel.SearchText);
+        Assert.Empty(viewModel.ClassHeaders);
+    }
+
+    [Fact]
     public async Task ContinueToGenerationCommand_HeaderTemplate_CreatesEditableDefaultHeader()
     {
         using var fixture = new ViewModelFixture { TemplateSupportsHeader = true };
@@ -254,6 +332,51 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(InputSelectionState.Error, viewModel.RosterInput.State);
     }
 
+    [Fact]
+    public async Task CancelOperation_AnalysisInProgress_RequestsOnceAndKeepsBundledTemplateIdentity()
+    {
+        using var fixture = new ViewModelFixture { BlockRosterRead = true };
+        var viewModel = fixture.CreateViewModel();
+        await viewModel.InitializeAsync();
+        fixture.SelectSourceFolders(viewModel);
+        var analysis = viewModel.AnalyzeCommand.ExecuteAsync();
+        await fixture.RosterReadStarted.Task;
+
+        viewModel.CancelOperation();
+        viewModel.CancelOperation();
+        await analysis;
+
+        Assert.Equal(DesktopWorkflowState.AnalysisCancelled, viewModel.WorkflowState);
+        Assert.False(viewModel.IsBusy);
+        Assert.True(viewModel.TemplateInput.IsBundled);
+        Assert.Equal("Incluida con DocMerge", viewModel.TemplateInput.DisplayLocation);
+        Assert.Equal(InputSelectionState.Selected, viewModel.TemplateInput.State);
+    }
+
+    [Fact]
+    public async Task CancelOperation_PublishingStarted_DoesNotTurnPublishedResultIntoCancellation()
+    {
+        using var fixture = new ViewModelFixture { BlockPublishing = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+        viewModel.BrowseOutputCommand.Execute(parameter: null);
+        var generation = viewModel.GenerateCommand.ExecuteAsync();
+        await fixture.PublishStarted.Task;
+        await viewModel.GenerateCommand.ExecuteAsync();
+
+        Assert.Equal(DesktopWorkflowState.Publishing, viewModel.WorkflowState);
+        Assert.False(viewModel.CanCancelOperation);
+        Assert.Equal(1, fixture.PublishCount);
+        viewModel.CancelOperation();
+        fixture.AllowPublishing.TrySetResult();
+        await generation;
+
+        Assert.Equal(DesktopWorkflowState.Completed, viewModel.WorkflowState);
+        Assert.NotNull(viewModel.GenerationResult);
+    }
+
     private sealed class ViewModelFixture : IDisposable
     {
         private readonly string _root = Path.Combine(
@@ -274,6 +397,21 @@ public sealed class MainWindowViewModelTests
         internal bool UseMixedReview { get; init; }
 
         internal bool TemplateSupportsHeader { get; init; }
+        internal bool BlockRosterRead { get; init; }
+        internal bool BlockPublishing { get; init; }
+        internal bool BlockBundledTemplate { get; init; }
+        internal int PublishCount { get; private set; }
+        internal int RosterReadCount { get; private set; }
+        internal TaskCompletionSource RosterReadStarted { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource PublishStarted { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource AllowPublishing { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource BundledTemplateRequested { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource AllowBundledTemplate { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
 
         internal string HistoricalDirectory => Path.Combine(_root, "history");
         private string RosterDirectory => Path.Combine(_root, "rosters");
@@ -288,30 +426,36 @@ public sealed class MainWindowViewModelTests
             var discovery = new StubDiscovery(inputs);
             var preparation = new ClassGenerationService(
                 discovery,
-                new StubRosterReader(RosterPath, FailRosterRead, UseMixedReview),
+                new StubRosterReader(this, RosterPath, FailRosterRead, UseMixedReview, BlockRosterRead),
                 new StubTemplateReader(TemplatePath, TemplateSupportsHeader),
                 new StubHistoricalReader(HistoricalPath, UseMixedReview),
                 new ClassGenerationPlanner(new HistoricalStudentResolver()));
             var execution = new ClassGenerationExecutionService(
                 new StubGenerator(),
                 new StubValidator(),
-                new StubPublisher(),
+                new StubPublisher(this),
                 new StubFileStore(),
                 discovery);
             return new MainWindowViewModel(
                 preparation,
                 execution,
-                new StubDialogs(),
+                new StubDialogs(_root),
                 new StubTheme(),
                 new StubPreferences(),
-                new StubFolderService());
+                new StubFolderService(),
+                new StubBundledTemplateProvider(this, TemplatePath));
         }
 
         internal void SelectInputs(MainWindowViewModel viewModel)
         {
+            SelectSourceFolders(viewModel);
+            viewModel.SelectDroppedPath(InputKind.Template, TemplatePath);
+        }
+
+        internal void SelectSourceFolders(MainWindowViewModel viewModel)
+        {
             viewModel.SelectDroppedPath(InputKind.HistoricalDocuments, HistoricalDirectory);
             viewModel.SelectDroppedPath(InputKind.Rosters, RosterDirectory);
-            viewModel.SelectDroppedPath(InputKind.Template, TemplatePath);
         }
 
         public void Dispose() => Directory.Delete(_root, recursive: true);
@@ -325,20 +469,32 @@ public sealed class MainWindowViewModelTests
                 CancellationToken cancellationToken) => Task.FromResult(inputs);
         }
 
-        private sealed class StubRosterReader(string path, bool fail, bool useMixedReview) : IClassRosterReader
+        private sealed class StubRosterReader(
+            ViewModelFixture fixture,
+            string path,
+            bool fail,
+            bool useMixedReview,
+            bool block) : IClassRosterReader
         {
-            public Task<ClassRoster> ReadAsync(string ignored, CancellationToken cancellationToken)
+            public async Task<ClassRoster> ReadAsync(string ignored, CancellationToken cancellationToken)
             {
+                fixture.RosterReadCount++;
                 if (fail)
                 {
                     throw new IOException("Roster read failed.");
                 }
 
+                if (block)
+                {
+                    fixture.RosterReadStarted.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+
                 var entries = useMixedReview
                     ? MixedEntries()
                     : [Entry("ALUMNO, UNO", "12345678", 1)];
-                return Task.FromResult(new ClassRoster(
-                    path, "roster-hash", new ClassIdentifier("ESO", 2, "A"), entries, 1, false));
+                return new ClassRoster(
+                    path, "roster-hash", new ClassIdentifier("ESO", 2, "A"), entries, 1, false);
             }
 
             private static ClassRosterEntry[] MixedEntries() =>
@@ -429,14 +585,24 @@ public sealed class MainWindowViewModelTests
                 CancellationToken cancellationToken) => Task.CompletedTask;
         }
 
-        private sealed class StubPublisher : IGenerationBatchPublisher
+        private sealed class StubPublisher(ViewModelFixture fixture) : IGenerationBatchPublisher
         {
             public string CreateTemporaryDirectory(string outputDirectory) => outputDirectory + ".tmp";
 
-            public Task PublishAsync(
+            public async Task PublishAsync(
                 string temporaryDirectory,
                 string outputDirectory,
-                CancellationToken cancellationToken) => Task.CompletedTask;
+                CancellationToken cancellationToken)
+            {
+                fixture.PublishCount++;
+                if (!fixture.BlockPublishing)
+                {
+                    return;
+                }
+
+                fixture.PublishStarted.TrySetResult();
+                await fixture.AllowPublishing.Task;
+            }
 
             public void DeleteIfExists(string temporaryDirectory)
             {
@@ -447,7 +613,11 @@ public sealed class MainWindowViewModelTests
         {
             public string GetFullPath(string path) => path;
             public Task<string> ComputeHashAsync(string path, CancellationToken cancellationToken) =>
-                Task.FromResult(string.Empty);
+                Task.FromResult(Path.GetExtension(path).Equals(".pdf", StringComparison.OrdinalIgnoreCase)
+                    ? "roster-hash"
+                    : Path.GetFileName(path).StartsWith("template", StringComparison.OrdinalIgnoreCase)
+                        ? "template-hash"
+                        : "historical-hash");
             public string CreateTemporaryPath(string outputPath, string label) => outputPath + ".tmp";
             public Task PublishAsync(string temporaryPath, string outputPath, CancellationToken cancellationToken) =>
                 Task.CompletedTask;
@@ -456,10 +626,32 @@ public sealed class MainWindowViewModelTests
             }
         }
 
-        private sealed class StubDialogs : IFileDialogService
+        private sealed class StubDialogs(string outputParent) : IFileDialogService
         {
-            public string? SelectFolder(string title, string? initialDirectory = null) => null;
+            public string? SelectFolder(string title, string? initialDirectory = null) => outputParent;
             public string? SelectDocx(string title, string? initialDirectory = null) => null;
+        }
+
+        private sealed class StubBundledTemplateProvider(ViewModelFixture fixture, string path)
+            : IBundledGenerationTemplateProvider
+        {
+            public async Task<BundledGenerationTemplate> GetAsync(CancellationToken cancellationToken)
+            {
+                if (fixture.BlockBundledTemplate)
+                {
+                    fixture.BundledTemplateRequested.TrySetResult();
+                    await fixture.AllowBundledTemplate.Task;
+                }
+
+                return new BundledGenerationTemplate(
+                    "standard-class",
+                    1,
+                    "docx",
+                    1,
+                    "Plantilla estándar de DocMerge",
+                    "hash",
+                    path);
+            }
         }
 
         private sealed class StubTheme : IThemeService

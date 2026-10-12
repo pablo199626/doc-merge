@@ -33,12 +33,18 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDesktopPreferencesService _preferences;
     private readonly ISystemFolderService _folderService;
     private readonly IBundledGenerationTemplateProvider? _bundledTemplateProvider;
+    private readonly SynchronizationContext? _synchronizationContext;
+    private readonly object _operationGate = new();
     private PreparedClassGeneration? _prepared;
     private CancellationTokenSource? _operationCancellation;
     private int _inputRevision;
     private int _operationSequence;
-    private int _currentStep = 1;
-    private bool _isBusy;
+    private int _sessionSequence;
+    private DesktopWorkflowState _workflowState = DesktopWorkflowState.Selecting;
+    private bool _canCancelActiveOperation;
+    private bool _isCancellationRequested;
+    private TaskCompletionSource? _operationCompletion;
+    private TaskCompletionSource? _sessionUpdateCompletion;
     private bool _isDark;
     private ThemePreference _selectedThemePreference;
     private bool _isSidebarExpanded;
@@ -50,8 +56,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private string _selectedFilter = AllStatusesFilter;
     private string? _outputParent;
     private string _outputFolderName = "Clases generadas";
-    private string? _publishedDirectory;
     private string? _finalStatus;
+    private string? _outputOpenError;
+    private GenerationResultViewModel? _generationResult;
     private bool _isBundledTemplateInitialized;
 
     /// <summary>Initializes the desktop workflow.</summary>
@@ -71,6 +78,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _folderService = folderService ?? throw new ArgumentNullException(nameof(folderService));
         _bundledTemplateProvider = bundledTemplateProvider;
+        _synchronizationContext = SynchronizationContext.Current;
         _isDark = themeService.IsDark;
         _selectedThemePreference = themeService.Preference;
         _isSidebarExpanded = preferences.Load().IsSidebarExpanded;
@@ -93,22 +101,26 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             TemplateInput.SetBundledPending("Plantilla estándar de DocMerge");
         }
 
-        BrowseInputCommand = new RelayCommand(BrowseInput, _ => !IsBusy);
-        RemoveInputCommand = new RelayCommand(RemoveInput, _ => !IsBusy);
+        BrowseInputCommand = new RelayCommand(BrowseInput, _ => CanModifyInputs);
+        RemoveInputCommand = new RelayCommand(RemoveInput, _ => CanModifyInputs);
         RestoreIncludedTemplateCommand = new AsyncRelayCommand(
             RestoreIncludedTemplateAsync,
-            () => !IsBusy && TemplateInput.CanRestoreBundled,
+            () => CanModifyInputs && TemplateInput.CanRestoreBundled,
             HandleUnexpectedError);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, CanAnalyze, HandleUnexpectedError);
-        CancelCommand = new RelayCommand(_ => CancelOperation(), _ => IsBusy);
-        BackToFilesCommand = new RelayCommand(_ => CurrentStep = 1, _ => !IsBusy);
+        CancelCommand = new RelayCommand(_ => CancelOperation(), _ => CanCancelOperation);
+        BackToFilesCommand = new RelayCommand(_ => NavigateToFiles(), _ => WorkflowState == DesktopWorkflowState.Reviewing);
         ContinueToGenerationCommand = new RelayCommand(
-            _ => CurrentStep = 3,
+            _ => NavigateToConfiguration(),
             _ => CanContinueToGeneration);
-        BackToReviewCommand = new RelayCommand(_ => CurrentStep = 2, _ => !IsBusy);
-        BrowseOutputCommand = new RelayCommand(_ => BrowseOutput(), _ => !IsBusy);
+        BackToReviewCommand = new RelayCommand(_ => NavigateToReview(), _ => CanReturnToReview);
+        BrowseOutputCommand = new RelayCommand(_ => BrowseOutput(), _ => CanEditConfiguration);
         GenerateCommand = new AsyncRelayCommand(GenerateAsync, CanGenerate, HandleUnexpectedError);
-        OpenOutputCommand = new RelayCommand(_ => OpenOutput(), _ => PublishedDirectory is not null);
+        OpenOutputCommand = new RelayCommand(_ => OpenOutput(), _ => WorkflowState == DesktopWorkflowState.Completed);
+        NewGenerationCommand = new AsyncRelayCommand(
+            StartNewGenerationAsync,
+            () => WorkflowState == DesktopWorkflowState.Completed,
+            HandleUnexpectedError);
         ShowIssueCommand = new RelayCommand(ShowIssue);
         ShowAllIssuesCommand = new RelayCommand(_ => ShowAllIssues(), _ => Issues.Count > 0);
         ShowIssueGroupCommand = new RelayCommand(ShowIssueGroup);
@@ -190,6 +202,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the command that opens the published folder.</summary>
     public RelayCommand OpenOutputCommand { get; }
 
+    /// <summary>Gets the command that starts a clean desktop session.</summary>
+    public AsyncRelayCommand NewGenerationCommand { get; }
+
     /// <summary>Gets the command that shows issue detail.</summary>
     public RelayCommand ShowIssueCommand { get; }
 
@@ -225,28 +240,34 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         new(ThemePreference.Dark, "Oscuro"),
     ];
 
-    /// <summary>Gets or sets the active workflow step.</summary>
-    public int CurrentStep
+    /// <summary>Gets the exclusive state of the current desktop session.</summary>
+    public DesktopWorkflowState WorkflowState
     {
-        get => _currentStep;
+        get => _workflowState;
         private set
         {
-            if (!SetProperty(ref _currentStep, value))
+            if (!SetProperty(ref _workflowState, value))
             {
                 return;
             }
 
-            OnPropertyChanged(nameof(IsSelectionStep));
-            OnPropertyChanged(nameof(IsReviewStep));
-            OnPropertyChanged(nameof(IsGenerationStep));
-            OnPropertyChanged(nameof(StepOneIndicator));
-            OnPropertyChanged(nameof(StepTwoIndicator));
-            OnPropertyChanged(nameof(StepThreeIndicator));
-            OnPropertyChanged(nameof(StepOneState));
-            OnPropertyChanged(nameof(StepTwoState));
-            OnPropertyChanged(nameof(StepThreeState));
+            NotifyWorkflowStateChanged();
         }
     }
+
+    /// <summary>Gets the active one-based workflow step.</summary>
+    public int CurrentStep => WorkflowState switch
+    {
+        DesktopWorkflowState.Reviewing => 2,
+        DesktopWorkflowState.Configuring
+            or DesktopWorkflowState.Generating
+            or DesktopWorkflowState.CancellingGeneration
+            or DesktopWorkflowState.Publishing
+            or DesktopWorkflowState.Completed
+            or DesktopWorkflowState.GenerationCancelled
+            or DesktopWorkflowState.GenerationFailed => 3,
+        _ => 1,
+    };
 
     /// <summary>Gets whether selection is visible.</summary>
     public bool IsSelectionStep => CurrentStep == 1;
@@ -258,18 +279,20 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsGenerationStep => CurrentStep == 3;
 
     /// <summary>Gets the first step number or completion mark.</summary>
-    public string StepOneIndicator => CurrentStep == 1 ? "1" : "✓";
+    public string StepOneIndicator => StepOneState == WorkflowStepState.Completed ? "✓" : "1";
 
     /// <summary>Gets the second step number or completion mark.</summary>
-    public string StepTwoIndicator => CurrentStep < 3 ? "2" : "✓";
+    public string StepTwoIndicator => StepTwoState == WorkflowStepState.Completed ? "✓" : "2";
 
     /// <summary>Gets the third step number or completion mark.</summary>
-    public string StepThreeIndicator => PublishedDirectory is null ? "3" : "✓";
+    public string StepThreeIndicator => StepThreeState == WorkflowStepState.Completed ? "✓" : "3";
 
     /// <summary>Gets the visual state of input selection.</summary>
     public WorkflowStepState StepOneState => CurrentStep == 1
         ? WorkflowStepState.Current
-        : WorkflowStepState.Completed;
+        : _prepared is null
+            ? WorkflowStepState.Pending
+            : WorkflowStepState.Completed;
 
     /// <summary>Gets the visual state of review.</summary>
     public WorkflowStepState StepTwoState => CurrentStep switch
@@ -280,24 +303,56 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     };
 
     /// <summary>Gets the visual state of document generation.</summary>
-    public WorkflowStepState StepThreeState => PublishedDirectory is not null
+    public WorkflowStepState StepThreeState => WorkflowState == DesktopWorkflowState.Completed
         ? WorkflowStepState.Completed
         : CurrentStep == 3
             ? WorkflowStepState.Current
             : WorkflowStepState.Pending;
 
     /// <summary>Gets whether a long operation is active.</summary>
-    public bool IsBusy
+    public bool IsBusy => WorkflowState is
+        DesktopWorkflowState.Initializing
+        or DesktopWorkflowState.Analyzing
+        or DesktopWorkflowState.CancellingAnalysis
+        or DesktopWorkflowState.Generating
+        or DesktopWorkflowState.CancellingGeneration
+        or DesktopWorkflowState.Publishing;
+
+    /// <summary>Gets whether analysis is active and can still be cancelled.</summary>
+    public bool CanCancelAnalysis => WorkflowState == DesktopWorkflowState.Analyzing && CanCancelOperation;
+
+    /// <summary>Gets whether generation is active and can still be cancelled.</summary>
+    public bool CanCancelGeneration => WorkflowState == DesktopWorkflowState.Generating && CanCancelOperation;
+
+    /// <summary>Gets whether a cancellation request is waiting for cleanup.</summary>
+    public bool IsCancelling => WorkflowState is
+        DesktopWorkflowState.CancellingAnalysis or DesktopWorkflowState.CancellingGeneration;
+
+    /// <summary>Gets whether the generation form should be shown.</summary>
+    public bool IsConfigurationVisible => WorkflowState is
+        DesktopWorkflowState.Configuring
+        or DesktopWorkflowState.GenerationCancelled
+        or DesktopWorkflowState.GenerationFailed;
+
+    /// <summary>Gets whether generation progress should replace the editable form.</summary>
+    public bool IsGenerationOperationVisible => WorkflowState is
+        DesktopWorkflowState.Generating
+        or DesktopWorkflowState.CancellingGeneration
+        or DesktopWorkflowState.Publishing;
+
+    /// <summary>Gets whether the confirmed result view should be shown.</summary>
+    public bool IsGenerationCompleted => WorkflowState == DesktopWorkflowState.Completed;
+
+    /// <summary>Gets the current operation's non-pulsable primary label.</summary>
+    public string OperationActionText => IsCancelling ? "Cancelando…" : "Generando…";
+
+    /// <summary>Gets the selection step's context-sensitive primary label.</summary>
+    public string AnalysisActionText => WorkflowState switch
     {
-        get => _isBusy;
-        private set
-        {
-            if (SetProperty(ref _isBusy, value))
-            {
-                RefreshCommands();
-            }
-        }
-    }
+        DesktopWorkflowState.Analyzing => "Analizando…",
+        DesktopWorkflowState.CancellingAnalysis => "Cancelando…",
+        _ => "Analizar y continuar",
+    };
 
     /// <summary>Gets whether the effective theme is dark.</summary>
     public bool IsDark
@@ -436,7 +491,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the filtered and total student count.</summary>
     public string VisibleStudentSummary => SelectedClass is null
         ? "Sin clase seleccionada"
-        : $"Mostrando {VisibleStudents.Count} de {SelectedClass.StudentCount} alumnos";
+        : HasActiveReviewFilters
+            ? $"{VisibleStudents.Count} de {SelectedClass.StudentCount} alumnos coinciden"
+            : CountText(SelectedClass.StudentCount, "alumno en esta clase", "alumnos en esta clase");
 
     /// <summary>Gets whether the active filters contain at least one student.</summary>
     public bool HasVisibleStudents => VisibleStudents.Count > 0;
@@ -469,11 +526,16 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     /// <summary>Gets guidance for the selected template's header support.</summary>
     public string HeaderCustomizationMessage => IsHeaderCustomizationAvailable
-        ? "El tutor o tutora es opcional. Si se deja vacío, se conservará el espacio previsto en la plantilla."
+        ? "Si lo dejas vacío, se conserva su espacio en el documento."
         : "Esta plantilla es compatible con la generación, pero no admite personalizar la cabecera.";
 
     /// <summary>Gets whether any editable document header is invalid.</summary>
     public bool HasHeaderErrors => ClassHeaders.Any(item => item.HasErrors);
+
+    /// <summary>Gets selection guidance consistent with the active template source.</summary>
+    public string SelectionIntroduction => TemplateInput.IsBundled
+        ? "Selecciona las carpetas de históricos y listados PDF. La plantilla estándar ya está incluida."
+        : "Selecciona las carpetas de históricos y listados PDF. Se utilizará la plantilla externa elegida.";
 
     /// <summary>Gets or sets the existing parent folder for output.</summary>
     public string? OutputParent
@@ -485,6 +547,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 OnPropertyChanged(nameof(OutputDirectory));
                 OnPropertyChanged(nameof(OutputError));
+                OutputOpenError = null;
                 RefreshCommands();
             }
         }
@@ -500,6 +563,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 OnPropertyChanged(nameof(OutputDirectory));
                 OnPropertyChanged(nameof(OutputError));
+                OutputOpenError = null;
                 RefreshCommands();
             }
         }
@@ -518,7 +582,12 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         {
             if (string.IsNullOrWhiteSpace(OutputParent))
             {
-                return "Selecciona la carpeta contenedora.";
+                return "Selecciona dónde guardar la carpeta nueva.";
+            }
+
+            if (!Directory.Exists(OutputParent))
+            {
+                return "La ubicación seleccionada ya no está disponible.";
             }
 
             if (!IsValidFolderName(OutputFolderName))
@@ -533,19 +602,32 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Gets the directory published by the last successful execution.</summary>
-    public string? PublishedDirectory
+    /// <summary>Gets the directory from the last confirmed execution.</summary>
+    public string? PublishedDirectory => GenerationResult?.OutputDirectory;
+
+    /// <summary>Gets the immutable result of the confirmed execution.</summary>
+    public GenerationResultViewModel? GenerationResult
     {
-        get => _publishedDirectory;
+        get => _generationResult;
         private set
         {
-            if (SetProperty(ref _publishedDirectory, value))
+            if (SetProperty(ref _generationResult, value))
             {
+                OnPropertyChanged(nameof(PublishedDirectory));
+                OnPropertyChanged(nameof(HasResultIssues));
                 OpenOutputCommand.NotifyCanExecuteChanged();
-                OnPropertyChanged(nameof(StepThreeIndicator));
-                OnPropertyChanged(nameof(StepThreeState));
             }
         }
+    }
+
+    /// <summary>Gets whether the confirmed result contains structured issues.</summary>
+    public bool HasResultIssues => GenerationResult?.HasIssues == true;
+
+    /// <summary>Gets an error raised while opening an otherwise successful output.</summary>
+    public string? OutputOpenError
+    {
+        get => _outputOpenError;
+        private set => SetProperty(ref _outputOpenError, value);
     }
 
     /// <summary>Gets the final success, cancellation, or failure text.</summary>
@@ -559,7 +641,35 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public string Version => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "2.1.0";
 
     /// <summary>Gets whether review can advance to final generation.</summary>
-    public bool CanContinueToGeneration => _prepared is not null && !HasBlockingIssues && !IsBusy;
+    public bool CanContinueToGeneration => WorkflowState == DesktopWorkflowState.Reviewing
+        && _prepared is not null
+        && !HasBlockingIssues;
+
+    /// <summary>Gets an identity that changes whenever a new desktop session starts.</summary>
+    public int SessionSequence => _sessionSequence;
+
+    /// <summary>Gets whether the active operation can honestly accept cancellation.</summary>
+    public bool CanCancelOperation
+    {
+        get
+        {
+            lock (_operationGate)
+            {
+                return _canCancelActiveOperation && !_isCancellationRequested;
+            }
+        }
+    }
+
+    /// <summary>Gets a task that completes after the active operation has returned and cleaned up.</summary>
+    public Task WaitForActiveOperationAsync()
+    {
+        lock (_operationGate)
+        {
+            return _operationCompletion?.Task
+                ?? _sessionUpdateCompletion?.Task
+                ?? Task.CompletedTask;
+        }
+    }
 
     /// <summary>Prepares the included template without exposing its internal path.</summary>
     public async Task InitializeAsync()
@@ -570,16 +680,30 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         _isBundledTemplateInitialized = true;
+        var session = _sessionSequence;
+        var completion = BeginSessionUpdate();
+        WorkflowState = DesktopWorkflowState.Initializing;
         try
         {
             var template = await _bundledTemplateProvider.GetAsync(CancellationToken.None);
+            if (session != _sessionSequence)
+            {
+                return;
+            }
+
             TemplateInput.SelectBundled(template.Path, template.DisplayName);
+            WorkflowState = DesktopWorkflowState.Selecting;
         }
         catch (Exception error) when (error is IOException
             or UnauthorizedAccessException
             or DocMergeException)
         {
             TemplateInput.SetError($"No se pudo preparar la plantilla incluida: {error.Message}");
+            WorkflowState = DesktopWorkflowState.AnalysisFailed;
+        }
+        finally
+        {
+            EndSessionUpdate(completion);
         }
 
         RefreshCommands();
@@ -588,7 +712,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Accepts a path from drag and drop after validating its immediate type.</summary>
     public void SelectDroppedPath(InputKind kind, string path)
     {
-        if (!IsBusy)
+        if (CanModifyInputs)
         {
             SelectInput(kind, path);
         }
@@ -597,7 +721,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Shows an inline drag-and-drop error without discarding an existing selection.</summary>
     public void RejectDroppedPath(InputKind kind, string message)
     {
-        if (!IsBusy)
+        if (CanModifyInputs)
         {
             SetSelectionError(GetInput(kind), message);
         }
@@ -618,8 +742,23 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Requests cancellation and returns a task that completes when the active operation finishes.</summary>
     public void CancelOperation()
     {
+        CancellationTokenSource? cancellation;
+        lock (_operationGate)
+        {
+            if (!_canCancelActiveOperation || _isCancellationRequested)
+            {
+                return;
+            }
+
+            _isCancellationRequested = true;
+            cancellation = _operationCancellation;
+        }
+
+        WorkflowState = WorkflowState == DesktopWorkflowState.Analyzing
+            ? DesktopWorkflowState.CancellingAnalysis
+            : DesktopWorkflowState.CancellingGeneration;
         ProgressText = "Cancelando de forma segura…";
-        _operationCancellation?.Cancel();
+        cancellation?.Cancel();
     }
 
     /// <inheritdoc />
@@ -634,7 +773,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void BrowseInput(object? parameter)
     {
-        if (parameter is not InputSelectionViewModel input)
+        if (!CanModifyInputs || parameter is not InputSelectionViewModel input)
         {
             return;
         }
@@ -665,6 +804,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
         input.Select(path);
         InvalidatePreparedReview();
+        OnPropertyChanged(nameof(SelectionIntroduction));
     }
 
     private async Task RestoreIncludedTemplateAsync()
@@ -674,20 +814,45 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        var template = await _bundledTemplateProvider.GetAsync(CancellationToken.None);
-        if (TemplateInput.IsBundled
-            && string.Equals(TemplateInput.Path, template.Path, StringComparison.OrdinalIgnoreCase))
+        var session = _sessionSequence;
+        var previousState = WorkflowState;
+        var completion = BeginSessionUpdate();
+        WorkflowState = DesktopWorkflowState.Initializing;
+        try
         {
-            return;
-        }
+            var template = await _bundledTemplateProvider.GetAsync(CancellationToken.None);
+            if (session != _sessionSequence)
+            {
+                return;
+            }
 
-        TemplateInput.SelectBundled(template.Path, template.DisplayName);
-        InvalidatePreparedReview();
+            if (TemplateInput.IsBundled
+                && string.Equals(TemplateInput.Path, template.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                WorkflowState = previousState;
+                return;
+            }
+
+            TemplateInput.SelectBundled(template.Path, template.DisplayName);
+            InvalidatePreparedReview();
+            OnPropertyChanged(nameof(SelectionIntroduction));
+        }
+        catch (Exception error) when (error is IOException
+            or UnauthorizedAccessException
+            or DocMergeException)
+        {
+            GeneralError = $"No se pudo restaurar la plantilla incluida: {error.Message}";
+            WorkflowState = previousState;
+        }
+        finally
+        {
+            EndSessionUpdate(completion);
+        }
     }
 
     private void RemoveInput(object? parameter)
     {
-        if (parameter is InputSelectionViewModel { Kind: not InputKind.Template } input)
+        if (CanModifyInputs && parameter is InputSelectionViewModel { Kind: not InputKind.Template } input)
         {
             input.Clear();
             InvalidatePreparedReview();
@@ -696,24 +861,30 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private async Task AnalyzeAsync()
     {
+        if (_prepared is not null && WorkflowState == DesktopWorkflowState.Selecting)
+        {
+            WorkflowState = DesktopWorkflowState.Reviewing;
+            return;
+        }
+
         var revision = _inputRevision;
         GeneralError = null;
         StartInputAnalysis();
-        IsBusy = true;
-        _operationCancellation = new CancellationTokenSource();
-        var operation = ++_operationSequence;
-        var progress = CreateProgress(operation);
+        var (operation, cancellation) = BeginOperation();
+        WorkflowState = DesktopWorkflowState.Analyzing;
+        var progress = CreateOperationProgress(operation);
         var request = new ClassGenerationRequest(
             HistoricalInput.Path!, RosterInput.Path!, TemplateInput.Path!, StudentHeader);
+        var completionState = DesktopWorkflowState.AnalysisFailed;
         try
         {
             var prepared = await Task.Run(
                 () => _preparationService.PrepareAsync(
-                    request, _operationCancellation.Token, progress),
-                _operationCancellation.Token);
-            if (revision != _inputRevision)
+                    request, cancellation.Token, progress),
+                cancellation.Token);
+            if (revision != _inputRevision || WasCancellationRequested(operation))
             {
-                return;
+                throw new OperationCanceledException(cancellation.Token);
             }
 
             if (TemplateInput.IsBundled && !prepared.Template.SupportsDocumentHeader)
@@ -721,105 +892,131 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                 TemplateInput.SetError(
                     "La plantilla estándar incluida no contiene los campos de clase y tutor requeridos.");
                 GeneralError = "La plantilla incluida es incompatible. No se ha creado un plan de revisión.";
+                completionState = DesktopWorkflowState.AnalysisFailed;
                 return;
             }
 
             _prepared = prepared;
             CompleteInputAnalysis(prepared);
             BuildReview(prepared);
-            CurrentStep = 2;
+            completionState = DesktopWorkflowState.Reviewing;
         }
         catch (OperationCanceledException)
         {
-            ResetInputAfterCancellation();
             GeneralError = "Análisis cancelado. No se ha creado ningún plan de revisión.";
+            completionState = DesktopWorkflowState.AnalysisCancelled;
         }
         catch (GenerationInputException error)
         {
             SetInputError(error);
+            completionState = DesktopWorkflowState.AnalysisFailed;
         }
         catch (DocMergeException error)
         {
             GeneralError = error.Message;
+            completionState = DesktopWorkflowState.AnalysisFailed;
         }
         finally
         {
             StopInputAnalysis();
-            _operationCancellation.Dispose();
-            _operationCancellation = null;
-            _operationSequence++;
-            IsBusy = false;
+            EndOperation(operation, cancellation);
             ProgressText = string.Empty;
+            WorkflowState = completionState;
         }
     }
 
     private async Task GenerateAsync()
     {
-        if (_prepared is null || OutputDirectory is null)
+        if (_prepared is null || OutputDirectory is null || !CanGenerate())
         {
             return;
         }
 
+        var prepared = _prepared;
+        var outputDirectory = OutputDirectory;
+        var outputOptions = CreateOutputOptions();
+        var resultHeaders = outputOptions?.Headers
+            ?? new Dictionary<ClassIdentifier, ClassHeaderValues>();
+        var templateName = TemplateInput.DisplayName;
         GeneralError = null;
         FinalStatus = null;
-        PublishedDirectory = null;
-        IsBusy = true;
-        _operationCancellation = new CancellationTokenSource();
-        var operation = ++_operationSequence;
-        var progress = CreateProgress(operation);
+        GenerationResult = null;
+        OutputOpenError = null;
+        var (operation, cancellation) = BeginOperation();
+        WorkflowState = DesktopWorkflowState.Generating;
+        var progress = CreateOperationProgress(operation);
+        var completionState = DesktopWorkflowState.GenerationFailed;
+        GenerationResultViewModel? confirmedResult = null;
+        var inputsChanged = false;
         try
         {
             var request = new ClassGenerationExecutionRequest(
-                _prepared,
-                OutputDirectory,
+                prepared,
+                outputDirectory,
                 SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier),
-                CreateOutputOptions());
+                outputOptions);
             var result = await Task.Run(
                 () => _executionService.ExecuteAsync(
-                    request, _operationCancellation.Token, progress),
-                _operationCancellation.Token);
-            PublishedDirectory = result.OutputDirectory;
-            FinalStatus = $"Generación completada: {result.Documents.Count} documentos publicados.";
+                    request, cancellation.Token, progress),
+                cancellation.Token);
+            confirmedResult = new GenerationResultViewModel(
+                result, resultHeaders, templateName);
+            completionState = DesktopWorkflowState.Completed;
         }
         catch (OperationCanceledException)
         {
-            FinalStatus = "Generación cancelada. No se ha publicado un lote parcial.";
+            FinalStatus = "Generación cancelada. No se han guardado documentos parciales.";
+            completionState = DesktopWorkflowState.GenerationCancelled;
         }
         catch (PreparedInputsChangedException error)
         {
             FinalStatus = $"La revisión ha quedado obsoleta: {error.Message}";
-            InvalidatePreparedReview();
             GeneralError = "Las entradas han cambiado. Analiza y revisa de nuevo antes de generar.";
-            CurrentStep = 1;
+            inputsChanged = true;
+            completionState = DesktopWorkflowState.AnalysisFailed;
         }
         catch (DocMergeException error)
         {
             FinalStatus = $"No se pudo generar el lote: {error.Message}";
+            completionState = DesktopWorkflowState.GenerationFailed;
         }
         catch (IOException error)
         {
-            FinalStatus = $"No se pudo publicar el lote: {error.Message}";
+            FinalStatus = $"No se pudieron guardar los documentos: {error.Message}";
+            completionState = DesktopWorkflowState.GenerationFailed;
         }
         catch (UnauthorizedAccessException error)
         {
-            FinalStatus = $"No hay permisos para publicar el lote: {error.Message}";
+            FinalStatus = $"No hay permisos para guardar los documentos: {error.Message}";
+            completionState = DesktopWorkflowState.GenerationFailed;
         }
         finally
         {
-            _operationCancellation.Dispose();
-            _operationCancellation = null;
-            _operationSequence++;
-            IsBusy = false;
+            EndOperation(operation, cancellation);
             ProgressText = string.Empty;
+            if (inputsChanged)
+            {
+                InvalidatePreparedReview();
+                WorkflowState = completionState;
+            }
+            else
+            {
+                GenerationResult = confirmedResult;
+                WorkflowState = completionState;
+            }
         }
     }
 
-    private bool CanAnalyze() => !IsBusy
+    private bool CanAnalyze() => WorkflowState is
+        (DesktopWorkflowState.Selecting
+            or DesktopWorkflowState.AnalysisCancelled
+            or DesktopWorkflowState.AnalysisFailed)
         && HistoricalInput.HasSelection
         && RosterInput.HasSelection
         && TemplateInput.HasSelection;
 
-    private bool CanGenerate() => CanContinueToGeneration
+    private bool CanGenerate() => CanEditConfiguration
+        && HistoricalInput.HasSelection
         && OutputDirectory is not null
         && OutputError is null
         && !HasHeaderErrors;
@@ -839,6 +1036,11 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void BrowseOutput()
     {
+        if (!CanEditConfiguration)
+        {
+            return;
+        }
+
         var selected = _dialogs.SelectFolder("Selecciona dónde crear la carpeta nueva", OutputParent);
         if (selected is not null)
         {
@@ -848,9 +1050,121 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void OpenOutput()
     {
-        if (PublishedDirectory is not null)
+        var directory = GenerationResult?.OutputDirectory;
+        if (directory is null)
         {
-            _folderService.Open(PublishedDirectory);
+            return;
+        }
+
+        OutputOpenError = null;
+        if (!Directory.Exists(directory))
+        {
+            OutputOpenError = "La carpeta guardada ya no está disponible. Puede haberse movido o eliminado.";
+            return;
+        }
+
+        try
+        {
+            _folderService.Open(directory);
+        }
+        catch (Exception error) when (error is IOException
+            or UnauthorizedAccessException
+            or InvalidOperationException
+            or System.ComponentModel.Win32Exception)
+        {
+            OutputOpenError = $"No se pudo abrir la carpeta: {error.Message}";
+        }
+    }
+
+    private void NavigateToFiles()
+    {
+        if (WorkflowState == DesktopWorkflowState.Reviewing)
+        {
+            WorkflowState = DesktopWorkflowState.Selecting;
+        }
+    }
+
+    private void NavigateToConfiguration()
+    {
+        if (CanContinueToGeneration)
+        {
+            WorkflowState = DesktopWorkflowState.Configuring;
+        }
+    }
+
+    private void NavigateToReview()
+    {
+        if (CanReturnToReview)
+        {
+            WorkflowState = DesktopWorkflowState.Reviewing;
+        }
+    }
+
+    private async Task StartNewGenerationAsync()
+    {
+        if (WorkflowState != DesktopWorkflowState.Completed)
+        {
+            return;
+        }
+
+        var session = ++_sessionSequence;
+        var completion = BeginSessionUpdate();
+        try
+        {
+            _inputRevision++;
+            _prepared = null;
+            ClearClassHeaders();
+            Classes.Clear();
+            Issues.Clear();
+            VisibleStudents.Clear();
+            SelectedClass = null;
+            ClearReviewFilters();
+            HistoricalInput.Clear();
+            RosterInput.Clear();
+            TemplateInput.Clear();
+            GenerationResult = null;
+            FinalStatus = null;
+            GeneralError = null;
+            OutputOpenError = null;
+            OutputParent = null;
+            OutputFolderName = "Clases generadas";
+            ProgressText = string.Empty;
+            WorkflowState = DesktopWorkflowState.Initializing;
+
+            if (_bundledTemplateProvider is null)
+            {
+                WorkflowState = DesktopWorkflowState.Selecting;
+                return;
+            }
+
+            TemplateInput.SetBundledPending("Plantilla estándar de DocMerge");
+            try
+            {
+                var template = await _bundledTemplateProvider.GetAsync(CancellationToken.None);
+                if (session != _sessionSequence)
+                {
+                    return;
+                }
+
+                TemplateInput.SelectBundled(template.Path, template.DisplayName);
+                WorkflowState = DesktopWorkflowState.Selecting;
+            }
+            catch (Exception error) when (error is IOException
+                or UnauthorizedAccessException
+                or DocMergeException)
+            {
+                if (session != _sessionSequence)
+                {
+                    return;
+                }
+
+                TemplateInput.SetError($"No se pudo restaurar la plantilla incluida: {error.Message}");
+                WorkflowState = DesktopWorkflowState.AnalysisFailed;
+            }
+        }
+        finally
+        {
+            EndSessionUpdate(completion);
         }
     }
 
@@ -948,7 +1262,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         var consequence = issue.Code switch
         {
             "MissingHistoricalStudent" or "ConflictingHistoricalData" or "AmbiguousStudentIdentity" =>
-                "Se generará el nombre del PDF; las demás columnas quedarán vacías y señalizadas.",
+                "Se generará el nombre del PDF; las demás columnas quedarán vacías.",
             "DuplicateClass" or "DuplicateStudentNumber" =>
                 "Impide generar hasta corregir los documentos de entrada y analizar de nuevo.",
             _ => "Permite generar; revise las fuentes indicadas.",
@@ -1046,8 +1360,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         ClearClassHeaders();
         VisibleStudents.Clear();
         SelectedClass = null;
-        PublishedDirectory = null;
+        GenerationResult = null;
         FinalStatus = null;
+        OutputOpenError = null;
         GeneralError = null;
         OnPropertyChanged(nameof(BatchSummary));
         OnPropertyChanged(nameof(HasBlockingIssues));
@@ -1055,7 +1370,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsHeaderCustomizationAvailable));
         OnPropertyChanged(nameof(HeaderCustomizationMessage));
         OnPropertyChanged(nameof(HasHeaderErrors));
-        CurrentStep = 1;
+        WorkflowState = DesktopWorkflowState.Selecting;
         RefreshCommands();
     }
 
@@ -1087,17 +1402,6 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         HistoricalInput.CompleteAnalysis(prepared.Inputs.HistoricalDocumentPaths.Count);
         RosterInput.CompleteAnalysis(prepared.Inputs.RosterPdfPaths.Count);
         TemplateInput.CompleteAnalysis(count: null);
-    }
-
-    private void ResetInputAfterCancellation()
-    {
-        foreach (var input in Inputs())
-        {
-            if (input.HasSelection)
-            {
-                input.Select(input.Path!);
-            }
-        }
     }
 
     private void StopInputAnalysis()
@@ -1161,7 +1465,6 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         if (error.InputType == GenerationInputType.InputSet)
         {
             GeneralError = error.Message;
-            ResetInputAfterCancellation();
             return;
         }
 
@@ -1172,6 +1475,143 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             GenerationInputType.Template => InputKind.Template,
             _ => throw new InvalidOperationException("Tipo de entrada no reconocido."),
         }).SetError(error.Message);
+    }
+
+    private bool CanModifyInputs => WorkflowState is
+        DesktopWorkflowState.Selecting
+        or DesktopWorkflowState.AnalysisCancelled
+        or DesktopWorkflowState.AnalysisFailed
+        or DesktopWorkflowState.Configuring
+        or DesktopWorkflowState.GenerationCancelled
+        or DesktopWorkflowState.GenerationFailed;
+
+    private bool CanEditConfiguration => WorkflowState is
+        DesktopWorkflowState.Configuring
+        or DesktopWorkflowState.GenerationCancelled
+        or DesktopWorkflowState.GenerationFailed;
+
+    private bool CanReturnToReview => CanEditConfiguration && _prepared is not null;
+
+    private TaskCompletionSource BeginSessionUpdate()
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_operationGate)
+        {
+            _sessionUpdateCompletion = completion;
+        }
+
+        return completion;
+    }
+
+    private void EndSessionUpdate(TaskCompletionSource completion)
+    {
+        lock (_operationGate)
+        {
+            if (ReferenceEquals(_sessionUpdateCompletion, completion))
+            {
+                _sessionUpdateCompletion = null;
+            }
+        }
+
+        completion.TrySetResult();
+    }
+
+    private (int Operation, CancellationTokenSource Cancellation) BeginOperation()
+    {
+        var cancellation = new CancellationTokenSource();
+        lock (_operationGate)
+        {
+            _operationCancellation = cancellation;
+            _canCancelActiveOperation = true;
+            _isCancellationRequested = false;
+            _operationCompletion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _operationSequence++;
+            return (_operationSequence, cancellation);
+        }
+    }
+
+    private void EndOperation(int operation, CancellationTokenSource cancellation)
+    {
+        TaskCompletionSource? completion = null;
+        lock (_operationGate)
+        {
+            if (operation == _operationSequence)
+            {
+                _canCancelActiveOperation = false;
+                _isCancellationRequested = false;
+                _operationCancellation = null;
+                completion = _operationCompletion;
+                _operationCompletion = null;
+                _operationSequence++;
+            }
+        }
+
+        cancellation.Dispose();
+        completion?.TrySetResult();
+    }
+
+    private bool WasCancellationRequested(int operation)
+    {
+        lock (_operationGate)
+        {
+            return operation != _operationSequence || _isCancellationRequested;
+        }
+    }
+
+    private void DisplayProgress(int operation, ClassGenerationProgress progress)
+    {
+        lock (_operationGate)
+        {
+            if (operation != _operationSequence || _isCancellationRequested)
+            {
+                return;
+            }
+        }
+
+        if (progress.Stage == ClassGenerationStage.Publishing
+            && WorkflowState == DesktopWorkflowState.Generating)
+        {
+            WorkflowState = DesktopWorkflowState.Publishing;
+        }
+
+        ReportProgress(progress);
+    }
+
+    private void Dispatch(Action action)
+    {
+        if (_synchronizationContext is null || ReferenceEquals(SynchronizationContext.Current, _synchronizationContext))
+        {
+            action();
+            return;
+        }
+
+        _synchronizationContext.Post(_ => action(), state: null);
+    }
+
+    private void NotifyWorkflowStateChanged()
+    {
+        OnPropertyChanged(nameof(CurrentStep));
+        OnPropertyChanged(nameof(IsSelectionStep));
+        OnPropertyChanged(nameof(IsReviewStep));
+        OnPropertyChanged(nameof(IsGenerationStep));
+        OnPropertyChanged(nameof(StepOneIndicator));
+        OnPropertyChanged(nameof(StepTwoIndicator));
+        OnPropertyChanged(nameof(StepThreeIndicator));
+        OnPropertyChanged(nameof(StepOneState));
+        OnPropertyChanged(nameof(StepTwoState));
+        OnPropertyChanged(nameof(StepThreeState));
+        OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(CanCancelAnalysis));
+        OnPropertyChanged(nameof(CanCancelGeneration));
+        OnPropertyChanged(nameof(IsCancelling));
+        OnPropertyChanged(nameof(IsConfigurationVisible));
+        OnPropertyChanged(nameof(IsGenerationOperationVisible));
+        OnPropertyChanged(nameof(IsGenerationCompleted));
+        OnPropertyChanged(nameof(OperationActionText));
+        OnPropertyChanged(nameof(AnalysisActionText));
+        OnPropertyChanged(nameof(CanContinueToGeneration));
+        RefreshCommands();
     }
 
     private void ReportProgress(ClassGenerationProgress progress)
@@ -1186,19 +1626,37 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             ClassGenerationStage.VerifyingInputs => "Comprobando que las entradas no han cambiado…",
             ClassGenerationStage.GeneratingDocuments => "Generando documentos en una carpeta temporal…",
             ClassGenerationStage.ValidatingDocuments => "Validando los documentos generados…",
-            ClassGenerationStage.Publishing => "Publicando el lote validado…",
-            ClassGenerationStage.Completed => "Operación completada.",
+            ClassGenerationStage.Publishing => "Guardando los documentos…",
+            ClassGenerationStage.Completed => "Confirmando el resultado…",
             _ => string.Empty,
         };
     }
 
-    private IProgress<ClassGenerationProgress> CreateProgress(int operation) =>
-        new Progress<ClassGenerationProgress>(progress =>
+    private IProgress<ClassGenerationProgress> CreateOperationProgress(int operation) =>
+        new SynchronousProgress<ClassGenerationProgress>(progress =>
         {
-            if (operation == _operationSequence)
+            var shouldDisplay = false;
+            lock (_operationGate)
             {
-                ReportProgress(progress);
+                if (operation != _operationSequence || _isCancellationRequested)
+                {
+                    return;
+                }
+
+                if (progress.Stage == ClassGenerationStage.Publishing)
+                {
+                    _canCancelActiveOperation = false;
+                }
+
+                shouldDisplay = true;
             }
+
+            if (!shouldDisplay)
+            {
+                return;
+            }
+
+            Dispatch(() => DisplayProgress(operation, progress));
         });
 
     private static string UnitProgress(string label, ClassGenerationProgress progress) =>
@@ -1210,7 +1668,12 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private void HandleUnexpectedError(Exception error)
     {
         GeneralError = $"Se produjo un error inesperado: {error.Message}";
-        IsBusy = false;
+        if (IsBusy)
+        {
+            WorkflowState = CurrentStep == 3
+                ? DesktopWorkflowState.GenerationFailed
+                : DesktopWorkflowState.AnalysisFailed;
+        }
     }
 
     private void RefreshCommands()
@@ -1226,6 +1689,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         BackToFilesCommand.NotifyCanExecuteChanged();
         BackToReviewCommand.NotifyCanExecuteChanged();
         BrowseOutputCommand.NotifyCanExecuteChanged();
+        OpenOutputCommand.NotifyCanExecuteChanged();
+        NewGenerationCommand.NotifyCanExecuteChanged();
     }
 
     private InputSelectionViewModel GetInput(InputKind kind) => kind switch
@@ -1273,6 +1738,11 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             && trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
             && !trimmed.Contains(Path.DirectorySeparatorChar)
             && !trimmed.Contains(Path.AltDirectorySeparatorChar);
+    }
+
+    private sealed class SynchronousProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
     }
 }
 
