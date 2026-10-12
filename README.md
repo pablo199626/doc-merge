@@ -2,12 +2,14 @@
 
 DocMerge 2.1.0 ordena y transfiere filas completas de tablas DOCX y genera
 documentos de clases desde históricos, listados PDF y una plantilla. Incluye
-una aplicación WPF para seleccionar, revisar y generar estos lotes. La
+la aplicación de escritorio **Talos 1.0.0 — Automatización documental** para
+seleccionar, revisar y generar estos lotes. La
 implementación principal usa C# sobre .NET 10; la referencia Python permanece
 archivada en `legacy/python/`.
 
-El comando se identifica como `docmerge` y la entrega para Windows se publica
-como `DocMerge.exe`.
+El comando se identifica como `docmerge` y su entrega para Windows se publica
+como `release/DocMerge.exe`. La entrega WPF comercial se publica de forma
+independiente como `release-desktop/Talos.exe`.
 
 ## Desarrollo
 

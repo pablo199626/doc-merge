@@ -58,7 +58,7 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(
                 this,
-                "DocMerge está guardando o terminando una operación. La ventana se cerrará cuando finalice de forma segura.",
+                "Talos está guardando o terminando una operación. La ventana se cerrará cuando finalice de forma segura.",
                 "Operación en curso",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);

@@ -6,7 +6,8 @@
         xmlns:services="clr-namespace:DocMerge.Wpf.Services"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:vm="clr-namespace:DocMerge.Wpf.ViewModels"
-        Title="DocMerge — Generación de clases"
+        Title="Talos — Generación de clases"
+        Icon="Resources/Brand/Talos.ico"
         Width="1366" Height="820" MinWidth="720" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         Loaded="MainWindow_Loaded"
@@ -212,6 +213,7 @@
                 Visibility="{Binding IsSidebarOverlayVisible, Converter={StaticResource BooleanVisibility}}"
                 automation:AutomationProperties.Name="Cerrar menú lateral" />
 
+        <!--SideBar-->
         <Border x:Name="SidebarBorder" Grid.Column="0" Panel.ZIndex="10" Width="64"
                 HorizontalAlignment="Left"
                 ClipToBounds="True"
@@ -227,19 +229,18 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Grid Height="48" ToolTip="{Binding Version, StringFormat=DocMerge v{0}}">
+                <Grid Height="48" ToolTip="{Binding Version, StringFormat=Talos v{0}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="44" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="42" Height="42" CornerRadius="11" Background="{DynamicResource AccentBrush}">
-                        <ui:SymbolIcon Symbol="DocumentText24" FontSize="24" Foreground="White"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
+                    <Image Width="42" Height="42" Source="Resources/Brand/talos-64.png"
+                           Stretch="Uniform" SnapsToDevicePixels="True"
+                           automation:AutomationProperties.Name="Logotipo de Talos" />
                     <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"
                                 Style="{StaticResource SidebarLabel}">
-                        <TextBlock Text="DocMerge" FontSize="20" FontWeight="Bold" TextWrapping="NoWrap" />
-                        <TextBlock Text="Generación de clases" FontSize="10" Style="{StaticResource MutedText}"
+                        <TextBlock Text="TALOS" FontSize="20" FontWeight="SemiBold" TextWrapping="NoWrap" />
+                        <TextBlock Text="Automatización documental" FontSize="10" Style="{StaticResource MutedText}"
                                    TextWrapping="NoWrap" />
                     </StackPanel>
                 </Grid>
@@ -380,7 +381,7 @@
                                     <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding StepOneState}" Value="{x:Static vm:WorkflowStepState.Current}">
-                                            <Setter Property="Foreground" Value="White" />
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -426,7 +427,7 @@
                                     <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding StepTwoState}" Value="{x:Static vm:WorkflowStepState.Current}">
-                                            <Setter Property="Foreground" Value="White" />
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding StepTwoState}" Value="{x:Static vm:WorkflowStepState.Completed}">
                                             <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
@@ -475,7 +476,7 @@
                                     <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding StepThreeState}" Value="{x:Static vm:WorkflowStepState.Current}">
-                                            <Setter Property="Foreground" Value="White" />
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding StepThreeState}" Value="{x:Static vm:WorkflowStepState.Completed}">
                                             <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
@@ -516,13 +517,13 @@
                         </Grid>
                     </ScrollViewer>
                     <Border Grid.Row="2" Style="{StaticResource Card}" Margin="6,10,6,0" Padding="14"
-                            Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Top">
+                            Background="{DynamicResource InformationSoftBrush}" VerticalAlignment="Top">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="36" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <ui:SymbolIcon Symbol="Info24" FontSize="24" Foreground="{DynamicResource AccentBrush}" />
+                            <ui:SymbolIcon Symbol="Info24" FontSize="24" Foreground="{DynamicResource InformationBrush}" />
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="La revisión aparecerá después de analizar las tres entradas."
                                            FontWeight="SemiBold" />
@@ -1256,7 +1257,7 @@
                                        automation:AutomationProperties.LiveSetting="Polite" />
                             <TextBlock Text="{Binding ProgressText}" Margin="0,8,0,0" TextAlignment="Center"
                                        Style="{StaticResource MutedText}" TextWrapping="Wrap" />
-                            <TextBlock Text="DocMerge terminará la operación o su limpieza antes de permitir otra acción."
+                            <TextBlock Text="Talos terminará la operación o su limpieza antes de permitir otra acción."
                                        Margin="0,12,0,0" TextAlignment="Center" Style="{StaticResource MutedText}"
                                        TextWrapping="Wrap" />
                         </StackPanel>

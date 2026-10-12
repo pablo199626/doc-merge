@@ -114,7 +114,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
     /// <summary>Gets whether validation failed.</summary>
     public bool HasError => !string.IsNullOrWhiteSpace(Error);
 
-    /// <summary>Gets whether this selection is the official template included with DocMerge.</summary>
+    /// <summary>Gets whether this selection is the official template included with the desktop product.</summary>
     public bool IsBundled => _isBundled;
 
     /// <summary>Gets whether the official template can replace the current external selection.</summary>
@@ -138,7 +138,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
 
     /// <summary>Gets a readable source without exposing an internal bundled-template path.</summary>
     public string DisplayLocation => IsBundled
-        ? "Incluida con DocMerge"
+        ? "Incluida con Talos"
         : Path
             ?? string.Empty;
 
@@ -164,7 +164,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         _displayNameOverride = displayName;
         _isBundled = true;
         Path = null;
-        Status = "Incluida con DocMerge · preparando copia segura…";
+        Status = "Incluida con Talos · preparando copia segura…";
         Error = null;
         State = InputSelectionState.Analyzing;
         NotifyTemplateSourceChanged();
@@ -176,7 +176,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         _displayNameOverride = displayName;
         _isBundled = true;
         Path = System.IO.Path.GetFullPath(path);
-        Status = "Incluida con DocMerge · pendiente de analizar";
+        Status = "Incluida con Talos · pendiente de analizar";
         Error = null;
         Count = null;
         State = InputSelectionState.Selected;
@@ -201,7 +201,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         Status = count.HasValue
             ? $"Analizada · {count.Value} {(count.Value == 1 ? "documento" : "documentos")}"
             : IsBundled
-                ? "Incluida con DocMerge · analizada"
+                ? "Incluida con Talos · analizada"
                 : "Plantilla externa · analizada";
         State = InputSelectionState.Validated;
     }

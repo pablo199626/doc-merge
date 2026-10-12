@@ -14,12 +14,27 @@
     <InternalsVisibleTo Include="DocMerge.Wpf.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Resource Include="Resources\Brand\Talos.ico" />
+    <Resource Include="Resources\Brand\talos-64.png" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <AssemblyName>DocMerge</AssemblyName>
+    <AssemblyName>Talos</AssemblyName>
     <RootNamespace>DocMerge.Wpf</RootNamespace>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <Product>Talos</Product>
+    <Title>Talos — Automatización documental</Title>
+    <AssemblyTitle>Talos — Automatización documental</AssemblyTitle>
+    <Description>Talos — Automatización documental</Description>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <ApplicationIcon>Resources\Brand\Talos.ico</ApplicationIcon>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

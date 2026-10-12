@@ -47,4 +47,17 @@ public sealed class InputSelectionViewModelTests
         Assert.Equal(InputSelectionState.Selected, input.State);
         Assert.Equal("Seleccionado · pendiente de analizar", input.Status);
     }
+
+    [Fact]
+    public void SelectBundled_OfficialTemplate_UsesCommercialProductName()
+    {
+        var input = new InputSelectionViewModel(
+            InputKind.Template, "Plantilla", "Descripción");
+
+        input.SelectBundled("template.docx", "Plantilla estándar de Talos");
+        input.CompleteAnalysis(count: null);
+
+        Assert.Equal("Incluida con Talos", input.DisplayLocation);
+        Assert.Equal("Incluida con Talos · analizada", input.Status);
+    }
 }

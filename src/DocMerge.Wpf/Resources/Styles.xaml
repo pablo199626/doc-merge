@@ -86,7 +86,7 @@
                             <Setter TargetName="PillBorder" Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="PillBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="PillBorder" Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
                             <Setter TargetName="PillBorder" Property="BorderThickness" Value="2" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
@@ -143,7 +143,7 @@
                             <Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource SidebarPressedBrush}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.55" />
@@ -193,7 +193,7 @@
                             <Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource PrimaryActionPressedBrush}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource PrimaryActionForegroundBrush}" />
+                            <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource PrimaryActionDisabledBrush}" />
@@ -234,7 +234,7 @@
                             <Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource SidebarPressedBrush}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

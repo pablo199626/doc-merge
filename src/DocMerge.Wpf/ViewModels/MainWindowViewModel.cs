@@ -14,6 +14,7 @@ namespace DocMerge.Wpf.ViewModels;
 public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private const string StudentHeader = "Nombre y Apellidos";
+    private const string BundledTemplateDisplayName = "Plantilla estándar de Talos";
     private const double CompactSidebarWidth = 64;
     private const double ExpandedSidebarWidth = 220;
     private const double SidebarOverlayThreshold = 900;
@@ -95,10 +96,10 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         TemplateInput = new InputSelectionViewModel(
             InputKind.Template,
             "Plantilla (DOCX)",
-            "Plantilla estándar de DocMerge");
+            BundledTemplateDisplayName);
         if (_bundledTemplateProvider is not null)
         {
-            TemplateInput.SetBundledPending("Plantilla estándar de DocMerge");
+            TemplateInput.SetBundledPending(BundledTemplateDisplayName);
         }
 
         BrowseInputCommand = new RelayCommand(BrowseInput, _ => CanModifyInputs);
@@ -638,7 +639,10 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Gets the assembly product version.</summary>
-    public string Version => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "2.1.0";
+    public string Version => Assembly.GetExecutingAssembly()
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+        .InformationalVersion
+        ?? "1.0.0";
 
     /// <summary>Gets whether review can advance to final generation.</summary>
     public bool CanContinueToGeneration => WorkflowState == DesktopWorkflowState.Reviewing
@@ -691,7 +695,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            TemplateInput.SelectBundled(template.Path, template.DisplayName);
+            TemplateInput.SelectBundled(template.Path, BundledTemplateDisplayName);
             WorkflowState = DesktopWorkflowState.Selecting;
         }
         catch (Exception error) when (error is IOException
@@ -833,7 +837,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            TemplateInput.SelectBundled(template.Path, template.DisplayName);
+            TemplateInput.SelectBundled(template.Path, BundledTemplateDisplayName);
             InvalidatePreparedReview();
             OnPropertyChanged(nameof(SelectionIntroduction));
         }
@@ -1137,7 +1141,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            TemplateInput.SetBundledPending("Plantilla estándar de DocMerge");
+            TemplateInput.SetBundledPending(BundledTemplateDisplayName);
             try
             {
                 var template = await _bundledTemplateProvider.GetAsync(CancellationToken.None);
@@ -1146,7 +1150,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                     return;
                 }
 
-                TemplateInput.SelectBundled(template.Path, template.DisplayName);
+                TemplateInput.SelectBundled(template.Path, BundledTemplateDisplayName);
                 WorkflowState = DesktopWorkflowState.Selecting;
             }
             catch (Exception error) when (error is IOException

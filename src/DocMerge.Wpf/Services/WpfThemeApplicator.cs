@@ -7,7 +7,7 @@ namespace DocMerge.Wpf.Services;
 /// <summary>Updates WPF UI and DocMerge resources through one application-level path.</summary>
 public sealed class WpfThemeApplicator : IThemeApplicator
 {
-    private static readonly Color BrandAccent = Color.FromRgb(0x08, 0x66, 0xF5);
+    private static readonly Color BrandAccent = Color.FromRgb(0xC9, 0x8A, 0x3F);
     private static readonly Uri LightTheme = new("Resources/LightTheme.xaml", UriKind.Relative);
     private static readonly Uri DarkTheme = new("Resources/DarkTheme.xaml", UriKind.Relative);
 

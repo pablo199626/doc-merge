@@ -60,7 +60,8 @@ con «Configurar documentos» y nunca escribe archivos; «Generar documentos» e
 única acción que ejecuta el lote. Expone el NIA, la procedencia histórica,
 los campos legibles y las incidencias globales o asociadas a clase/alumno. No
 renderiza Word/PDF ni permite editar o resolver manualmente los datos.
-La presentación usa controles y temas Fluent de WPF UI 4.3.0, manteniendo en
+La presentación comercial se identifica como **Talos — Automatización
+documental** y usa controles y temas Fluent de WPF UI 4.3.0, manteniendo en
 recursos propios únicamente los colores semánticos y la identidad visual.
 La revisión visual validada presenta tarjetas compactas para las entradas, una
 lista de clases y una tabla virtualizada con búsqueda, filtro y etiquetas de
@@ -77,8 +78,9 @@ colapsado y 220 DIP expandido. En ventanas estrechas, la expansión se superpone
 sobre el contenido sin reescribir la preferencia guardada. Apariencia permite
 elegir directamente Sistema, Claro u Oscuro. Sistema sigue el tema de
 aplicaciones de Windows; una elección `light`/`dark` del antiguo `theme.txt` se
-migra sin perderla. El tema conserva el acento `#0866F5` y actualiza WPF UI y los
-recursos semánticos mediante un único servicio.
+migra sin perderla. El tema aplica la identidad bronce (`#C98A3F` y `#F6CF8E`)
+y actualiza WPF UI y los recursos semánticos mediante un único servicio. Los
+estados de información, éxito, advertencia y error conservan colores propios.
 El icono lateral representa siempre la preferencia seleccionada: sol para Claro,
 luna para Oscuro y monitor para Sistema, aunque el tema efectivo de Sistema sea
 oscuro. El lateral anima ancho y etiquetas durante 200 ms, sustituye transiciones
@@ -118,7 +120,7 @@ separado y no invalida la generación. «Nueva generación» vacía históricos,
 salida, filtros, cabeceras y resultado, restaura la plantilla incluida y conserva
 solo las preferencias visuales. No modifica ni elimina archivos del usuario.
 
-La WPF selecciona inicialmente la «Plantilla estándar de DocMerge». Su identidad
+La WPF selecciona inicialmente la «Plantilla estándar de Talos». Su identidad
 incluida y su estado de validación documental se muestran por separado. Puede
 reemplazarse por una plantilla externa y restaurarse; cualquiera de esos cambios
 obliga a volver a selección y validar un plan nuevo. La ruta privada de la copia
@@ -273,9 +275,11 @@ Bloquean la publicación los problemas estructurales, incluidos:
   visual automatizado; la validación implementada comprueba estructura,
   identidades, contenido, partes DOCX y publicación. Mantén una revisión visual
   en Word cuando cambie la composición de filas o la plantilla.
-- La versión sigue siendo `2.1.0`; no la incrementes sin autorización expresa.
-- La entrega WPF validada está en `release-desktop/DocMerge.exe`; la entrega de
-  consola permanece separada e intacta en `release/DocMerge.exe`.
+- La versión técnica compartida y la consola siguen siendo `2.1.0`. La WPF
+  sobrescribe exclusivamente sus metadatos comerciales como Talos `1.0.0`, sin
+  cambiar contratos ni identificadores internos.
+- La entrega WPF comercial se publica en `release-desktop/Talos.exe`; la entrega
+  de consola permanece separada e intacta en `release/DocMerge.exe`.
 - El pulido visual y de estados descrito en este documento está publicado en la
   entrega WPF actual. La prueba aislada confirmó que no necesita una plantilla
   instalada junto al ejecutable: materializa y verifica el recurso incrustado.
@@ -353,3 +357,14 @@ aislada que contenía solo el ejecutable arrancó, materializó la plantilla inc
 con el hash oficial, cerró con código 0 y eliminó su directorio temporal. No
 dependió del repositorio, de una plantilla vecina ni de una instalación previa de
 .NET.
+
+El rebranding comercial posterior del mismo 12 de octubre publica la WPF como
+`release-desktop/Talos.exe`, con versión de archivo `1.0.0.0`, versión de producto
+`1.0.0`, ensamblado técnico `2.1.0.0`, tamaño 152.945.961 bytes y SHA-256
+`c266edb00eede9d41549ea6fcd2783b00f9f05e2e6c0f7a5b4041844d53f469a`. La
+suite completa superó 151 pruebas y una generación real mediante la composición
+WPF produjo las cuatro clases previstas sin alterar los 11 archivos de entrada
+comprobados. La copia aislada confirmó el icono Windows, la plantilla incrustada
+y su limpieza. Se revisaron visualmente claro, oscuro, Sistema, cambio de tema en
+caliente, lateral expandido/colapsado y 1366×820; el escalado DPI 125–200 % sigue
+requiriendo comprobación manual en equipos configurados con esos factores.
