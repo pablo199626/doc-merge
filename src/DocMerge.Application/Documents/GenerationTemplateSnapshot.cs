@@ -13,6 +13,7 @@ public sealed record GenerationTemplateSnapshot
     /// <param name="nameColumnIndex">The zero-based student-name column index.</param>
     /// <param name="columnHeaders">The normalized visible column headers.</param>
     /// <param name="prototypeRowXml">The serialized empty prototype row.</param>
+    /// <param name="headerContractVersion">The supported document-header contract, when present.</param>
     public GenerationTemplateSnapshot(
         string documentPath,
         string sha256,
@@ -20,7 +21,8 @@ public sealed record GenerationTemplateSnapshot
         int headerIndex,
         int nameColumnIndex,
         IReadOnlyList<string> columnHeaders,
-        string prototypeRowXml)
+        string prototypeRowXml,
+        int? headerContractVersion = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(documentPath);
         ArgumentNullException.ThrowIfNull(sha256);
@@ -33,6 +35,7 @@ public sealed record GenerationTemplateSnapshot
         NameColumnIndex = nameColumnIndex;
         ColumnHeaders = new ReadOnlyCollection<string>(columnHeaders.ToArray());
         PrototypeRowXml = prototypeRowXml;
+        HeaderContractVersion = headerContractVersion;
     }
 
     /// <summary>Gets the template path.</summary>
@@ -55,4 +58,10 @@ public sealed record GenerationTemplateSnapshot
 
     /// <summary>Gets the serialized empty prototype row.</summary>
     public string PrototypeRowXml { get; }
+
+    /// <summary>Gets the supported document-header contract, or <see langword="null"/> for a legacy template.</summary>
+    public int? HeaderContractVersion { get; }
+
+    /// <summary>Gets whether the template supports class-title and tutor personalization.</summary>
+    public bool SupportsDocumentHeader => HeaderContractVersion == TemplateHeaderContract.Version;
 }

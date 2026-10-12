@@ -7,9 +7,11 @@ public interface IGenerationInputDiscovery
     /// <param name="historicalDirectory">The recursively searched historical root.</param>
     /// <param name="rosterDirectory">The recursively searched roster root.</param>
     /// <param name="templatePath">The template path to exclude from historical inputs.</param>
+    /// <param name="cancellationToken">The token that cancels discovery.</param>
     /// <returns>The deterministic discovered inputs.</returns>
-    GenerationInputSet Discover(
+    Task<GenerationInputSet> DiscoverAsync(
         string historicalDirectory,
         string rosterDirectory,
-        string templatePath);
+        string templatePath,
+        CancellationToken cancellationToken);
 }

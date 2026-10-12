@@ -24,7 +24,8 @@ public sealed class DocxHistoricalStudentReader : IHistoricalStudentReader
             var candidates = document.Records.Select(record => new HistoricalStudentCandidate(
                 record,
                 StudentNameMatchKey.Create(record.OriginalName),
-                CreateInformationSignature(record, document.NameColumnIndex, package))).ToArray();
+                CreateInformationSignature(record, document.NameColumnIndex, package),
+                CreateReviewFields(record, document.NameColumnIndex, headers))).ToArray();
             return new HistoricalDocumentSnapshot(path, document.Sha256, headers, candidates);
         }
         catch (DocumentStructureException)
@@ -77,6 +78,28 @@ public sealed class DocxHistoricalStudentReader : IHistoricalStudentReader
         }
 
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(signature.ToString())));
+    }
+
+    private static IReadOnlyList<HistoricalInformationField> CreateReviewFields(
+        Domain.Documents.DocumentRecord record,
+        int nameColumnIndex,
+        IReadOnlyList<string> headers)
+    {
+        var row = XElement.Parse(record.RowXml, LoadOptions.PreserveWhitespace);
+        return DocxXml.RowCells(row)
+            .Select((cell, index) => (cell, index))
+            .Where(item => item.index != nameColumnIndex)
+            .Select(item => new HistoricalInformationField(
+                headers[item.index],
+                DocxXml.ElementText(item.cell),
+                HasNonTextContent(item.cell)))
+            .ToArray();
+    }
+
+    private static bool HasNonTextContent(XElement cell)
+    {
+        return cell.Descendants().Any(element =>
+            element.Name.LocalName is "drawing" or "object" or "pict");
     }
 
     private static void AppendPartHash(

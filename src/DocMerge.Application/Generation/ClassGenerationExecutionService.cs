@@ -11,59 +11,72 @@ public sealed class ClassGenerationExecutionService
     private readonly IClassGenerationValidator _validator;
     private readonly IGenerationBatchPublisher _publisher;
     private readonly IFileStore _fileStore;
+    private readonly IGenerationInputDiscovery _discovery;
 
     /// <summary>Initializes a new instance of the <see cref="ClassGenerationExecutionService"/> class.</summary>
     public ClassGenerationExecutionService(
         IClassDocumentGenerator generator,
         IClassGenerationValidator validator,
         IGenerationBatchPublisher publisher,
-        IFileStore fileStore)
+        IFileStore fileStore,
+        IGenerationInputDiscovery discovery)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
+        _discovery = discovery ?? throw new ArgumentNullException(nameof(discovery));
     }
 
     /// <summary>Generates, validates, and atomically publishes a prepared batch.</summary>
-    /// <param name="prepared">The immutable prepared batch.</param>
-    /// <param name="sortingProfile">The output sorting profile.</param>
+    /// <param name="request">The reviewed batch, output directory, and sorting profile.</param>
     /// <param name="cancellationToken">The token that cancels the operation.</param>
+    /// <param name="progress">Optional stage progress.</param>
     /// <returns>The published result and its structured issues.</returns>
     public async Task<ClassGenerationResult> ExecuteAsync(
-        PreparedClassGeneration prepared,
-        SortingProfile sortingProfile,
-        CancellationToken cancellationToken)
+        ClassGenerationExecutionRequest request,
+        CancellationToken cancellationToken,
+        IProgress<ClassGenerationProgress>? progress = null)
     {
-        ArgumentNullException.ThrowIfNull(prepared);
-        ArgumentNullException.ThrowIfNull(sortingProfile);
+        ArgumentNullException.ThrowIfNull(request);
+        var prepared = request.Prepared;
+        var sortingProfile = request.SortingProfile;
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.OutputDirectory);
+        ValidateOutputOptions(prepared, request.OutputOptions);
         if (prepared.Plan.HasBlockingIssues)
         {
             throw new OperationValidationException(
                 "El plan contiene incidencias estructurales que impiden publicar el lote.");
         }
 
-        var temporary = _publisher.CreateTemporaryDirectory(
-            prepared.Request.OutputDirectory);
+        progress?.Report(new ClassGenerationProgress(ClassGenerationStage.VerifyingInputs));
+        await VerifyInputsAsync(prepared, cancellationToken);
+        var temporary = _publisher.CreateTemporaryDirectory(request.OutputDirectory);
         try
         {
+            progress?.Report(new ClassGenerationProgress(ClassGenerationStage.GeneratingDocuments));
             var generationRequest = new GenerateClassDocumentsRequest(
-                prepared, temporary, sortingProfile);
+                prepared, temporary, sortingProfile, request.OutputOptions);
             var generated = await _generator.GenerateAsync(
                 generationRequest, cancellationToken);
+            progress?.Report(new ClassGenerationProgress(ClassGenerationStage.ValidatingDocuments));
             await _validator.ValidateAsync(
-                new ValidateClassDocumentsRequest(prepared, generated, sortingProfile),
+                new ValidateClassDocumentsRequest(
+                    prepared, generated, sortingProfile, request.OutputOptions),
                 cancellationToken);
+            progress?.Report(new ClassGenerationProgress(ClassGenerationStage.VerifyingInputs));
             await VerifyInputsAsync(prepared, cancellationToken);
+            progress?.Report(new ClassGenerationProgress(ClassGenerationStage.Publishing));
             await _publisher.PublishAsync(
-                temporary, prepared.Request.OutputDirectory, cancellationToken);
+                temporary, request.OutputDirectory, cancellationToken);
             var published = generated.Select(document => new GeneratedClassDocument(
                 document.ClassIdentifier,
                 Path.Combine(
-                    prepared.Request.OutputDirectory,
+                    request.OutputDirectory,
                     Path.GetFileName(document.Path)))).ToArray();
+            progress?.Report(new ClassGenerationProgress(ClassGenerationStage.Completed));
             return new ClassGenerationResult(
-                prepared.Request.OutputDirectory, published, prepared.Plan);
+                request.OutputDirectory, published, prepared.Plan);
         }
         finally
         {
@@ -71,10 +84,38 @@ public sealed class ClassGenerationExecutionService
         }
     }
 
+    private static void ValidateOutputOptions(
+        PreparedClassGeneration prepared,
+        ClassGenerationOutputOptions? options)
+    {
+        if (options is null)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(options.Prepared, prepared))
+        {
+            throw new OperationValidationException(
+                "Las cabeceras pertenecen a un lote distinto del revisado.");
+        }
+
+        if (!prepared.Template.SupportsDocumentHeader)
+        {
+            throw new OperationValidationException(
+                "La plantilla seleccionada no admite personalización de cabecera.");
+        }
+    }
+
     private async Task VerifyInputsAsync(
         PreparedClassGeneration prepared,
         CancellationToken cancellationToken)
     {
+        var discovered = await _discovery.DiscoverAsync(
+            prepared.Request.HistoricalDirectory,
+            prepared.Request.RosterDirectory,
+            prepared.Request.TemplatePath,
+            cancellationToken);
+        VerifyDiscoveredPaths(prepared.Inputs, discovered);
         await VerifyHashAsync(
             prepared.Template.DocumentPath,
             prepared.Template.Sha256,
@@ -92,6 +133,20 @@ public sealed class ClassGenerationExecutionService
         }
     }
 
+    private static void VerifyDiscoveredPaths(
+        GenerationInputSet expected,
+        GenerationInputSet actual)
+    {
+        if (!expected.HistoricalDocumentPaths.SequenceEqual(
+                actual.HistoricalDocumentPaths, StringComparer.OrdinalIgnoreCase)
+            || !expected.RosterPdfPaths.SequenceEqual(
+                actual.RosterPdfPaths, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new PreparedInputsChangedException(
+                "El conjunto de entradas cambió después de preparar el plan.");
+        }
+    }
+
     private async Task VerifyHashAsync(
         string path,
         string expected,
@@ -100,7 +155,7 @@ public sealed class ClassGenerationExecutionService
         var actual = await _fileStore.ComputeHashAsync(path, cancellationToken);
         if (!string.Equals(actual, expected, StringComparison.Ordinal))
         {
-            throw new TransferValidationException(
+            throw new PreparedInputsChangedException(
                 $"Una entrada cambió durante la generación: {path}");
         }
     }

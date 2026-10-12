@@ -4,11 +4,9 @@ namespace DocMerge.Application.Generation;
 /// <param name="HistoricalDirectory">The historical DOCX root directory.</param>
 /// <param name="RosterDirectory">The class PDF root directory.</param>
 /// <param name="TemplatePath">The empty DOCX template path.</param>
-/// <param name="OutputDirectory">The new output directory.</param>
 /// <param name="Header">The exact student-name table header.</param>
 public sealed record ClassGenerationRequest(
     string HistoricalDirectory,
     string RosterDirectory,
     string TemplatePath,
-    string OutputDirectory,
     string Header);

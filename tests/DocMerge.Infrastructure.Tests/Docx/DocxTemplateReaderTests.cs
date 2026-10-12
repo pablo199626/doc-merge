@@ -33,4 +33,76 @@ public sealed class DocxTemplateReaderTests
 
         Assert.Contains("exclusivamente una fila vacía", error.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ReadAsync_ValidDocumentHeaderFields_ReportsPersonalizationSupport()
+    {
+        using var temporary = new TemporaryDirectory();
+        var path = temporary.File("template.docx");
+        DocxTestPackage.Create(
+            path,
+            [DocxTestPackage.Header + DocxTestPackage.EmptyRow],
+            documentHeaderFields: true);
+
+        var result = await new DocxTemplateReader().ReadAsync(
+            path, "Nombre y Apellidos", CancellationToken.None);
+
+        Assert.True(result.SupportsDocumentHeader);
+        Assert.Equal(1, result.HeaderContractVersion);
+    }
+
+    [Fact]
+    public async Task ReadAsync_LegacyTemplate_ReportsNoPersonalizationSupport()
+    {
+        using var temporary = new TemporaryDirectory();
+        var path = temporary.File("template.docx");
+        DocxTestPackage.Create(path, [DocxTestPackage.Header + DocxTestPackage.EmptyRow]);
+
+        var result = await new DocxTemplateReader().ReadAsync(
+            path, "Nombre y Apellidos", CancellationToken.None);
+
+        Assert.False(result.SupportsDocumentHeader);
+    }
+
+    [Theory]
+    [InlineData(true, false, "Falta")]
+    [InlineData(false, true, "duplicado")]
+    public async Task ReadAsync_InvalidDocumentHeaderFields_ThrowsStructureException(
+        bool omitTutor,
+        bool duplicateTitle,
+        string expectedMessage)
+    {
+        using var temporary = new TemporaryDirectory();
+        var path = temporary.File("template.docx");
+        DocxTestPackage.Create(
+            path,
+            [DocxTestPackage.Header + DocxTestPackage.EmptyRow],
+            documentHeaderFields: true,
+            omitTutorField: omitTutor,
+            duplicateClassTitleField: duplicateTitle);
+
+        var error = await Assert.ThrowsAsync<DocumentStructureException>(() =>
+            new DocxTemplateReader().ReadAsync(
+                path, "Nombre y Apellidos", CancellationToken.None));
+
+        Assert.Contains(expectedMessage, error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReadAsync_UndeclaredCompatibilityPrefix_ThrowsStructureException()
+    {
+        using var temporary = new TemporaryDirectory();
+        var path = temporary.File("template.docx");
+        DocxTestPackage.Create(
+            path,
+            [DocxTestPackage.Header + DocxTestPackage.EmptyRow],
+            invalidCompatibilityPrefix: true);
+
+        var error = await Assert.ThrowsAsync<DocumentStructureException>(() =>
+            new DocxTemplateReader().ReadAsync(
+                path, "Nombre y Apellidos", CancellationToken.None));
+
+        Assert.Contains("w14", error.Message, StringComparison.Ordinal);
+        Assert.Contains("sin definir", error.Message, StringComparison.Ordinal);
+    }
 }

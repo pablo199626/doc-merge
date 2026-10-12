@@ -59,6 +59,19 @@ public sealed class ClassGenerationPlannerTests
         Assert.Contains(result.Issues, issue =>
             issue.Code == "DuplicateStudentNumber"
             && issue.Severity == GenerationIssueSeverity.Blocking);
+        var issue = Assert.Single(result.Issues, item => item.Code == "DuplicateStudentNumber");
+        Assert.Collection(
+            issue.SourceReferences,
+            reference =>
+            {
+                Assert.Equal("11111111", reference.StudentNumber);
+                Assert.Equal("2ESOA", reference.ClassIdentifier!.CanonicalCode);
+            },
+            reference =>
+            {
+                Assert.Equal("11111111", reference.StudentNumber);
+                Assert.Equal("2ESOB", reference.ClassIdentifier!.CanonicalCode);
+            });
     }
 
     private static ClassRoster Roster(string group, params ClassRosterEntry[] entries)

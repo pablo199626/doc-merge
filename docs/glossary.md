@@ -10,6 +10,7 @@
 | destino | `Destination` |
 | incidencia | `TransferIssue` |
 | incidencia de generación | `GenerationIssue` |
+| referencia de incidencia | `GenerationIssueReference` |
 | índice histórico | `HistoricalStudentIndex` |
 | listado | `PdfList` |
 | listado de clase | `ClassRoster` |
@@ -20,3 +21,8 @@
 | transferencia | `Transfer` |
 | generación de clases | `ClassGeneration` |
 | plantilla | `GenerationTemplateSnapshot` |
+| plantilla incluida | `BundledGenerationTemplate` |
+| cabecera visible del documento | `ClassHeaderValues` |
+| opciones editables de salida | `ClassGenerationOutputOptions` |
+| lote preparado o revisión | `PreparedClassGeneration` |
+| carpeta nueva de salida | `OutputDirectory` |

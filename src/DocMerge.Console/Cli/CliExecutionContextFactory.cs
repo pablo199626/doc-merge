@@ -66,7 +66,6 @@ internal static class CliExecutionContextFactory
             options.HistoricalDirectory!,
             options.RosterDirectory!,
             options.TemplatePath!,
-            options.OutputDirectory,
             options.Header);
         var generationOptions = options.SortRule == SortingProfiles.DefaultIdentifier
             ? options with { SortRule = SortingProfiles.CommaSeparatedIdentifier }
