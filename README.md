@@ -27,9 +27,11 @@ Interfaz de escritorio:
 dotnet run --project src/DocMerge.Wpf
 ```
 
-La interfaz guía por tres pasos y permite revisar clases, alumnado e incidencias
-antes de elegir una carpeta nueva y publicar el lote. No edita los documentos ni
-resuelve manualmente las incidencias.
+La interfaz guía por tres pasos y permite revisar clases, alumnado e incidencias,
+personalizar el título visible y el tutor opcional de cada documento y publicar
+el lote en una carpeta nueva. Incluye una plantilla oficial disponible sin
+descargas; también admite una plantilla externa compatible. No permite editar el
+alumnado ni resolver manualmente las incidencias.
 
 ```powershell
 dotnet run --project src/DocMerge.Console -- "assets/documents/PAABLO ANEXOS.docx" --force

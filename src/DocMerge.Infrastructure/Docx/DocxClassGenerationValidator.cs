@@ -84,8 +84,13 @@ public sealed class DocxClassGenerationValidator : IClassGenerationValidator
 
         var resultParts = await ReadPartsAsync(path, cancellationToken);
         ValidateTemplateParts(templateParts, resultParts, cancellationToken);
+        ValidateDocumentHeader(
+            classPlan, request, templateParts, resultParts);
         ValidateOutsideTargetTable(
-            templateParts, resultParts, request.Prepared.Request.Header);
+            templateParts,
+            resultParts,
+            request.Prepared.Request.Header,
+            request.OutputOptions is not null);
     }
 
     private static void ValidateRow(
@@ -144,11 +149,6 @@ public sealed class DocxClassGenerationValidator : IClassGenerationValidator
                 $"El alumno sin resolución {studentName} contiene información inventada.");
         }
 
-        if (!cells[nameColumnIndex].Descendants(DocxNames.Word + "shd").Any())
-        {
-            throw new TransferValidationException(
-                $"El alumno sin resolución {studentName} no está identificado visualmente.");
-        }
     }
 
     private static void ValidateTemplateParts(
@@ -177,16 +177,61 @@ public sealed class DocxClassGenerationValidator : IClassGenerationValidator
     private static void ValidateOutsideTargetTable(
         IReadOnlyDictionary<string, byte[]> template,
         IReadOnlyDictionary<string, byte[]> result,
-        string header)
+        string header,
+        bool hasPersonalizedHeader)
     {
         var templateDocument = DocxXml.Parse(template[DocxNames.DocumentPart]);
         var resultDocument = DocxXml.Parse(result[DocxNames.DocumentPart]);
+        if (hasPersonalizedHeader)
+        {
+            DocxTemplateHeaderFields.ClearValuesForComparison(templateDocument, header);
+            DocxTemplateHeaderFields.ClearValuesForComparison(resultDocument, header);
+        }
+
         DocxXml.LocateStrictTable(templateDocument, header).Table.Remove();
         DocxXml.LocateStrictTable(resultDocument, header).Table.Remove();
         if (!XNode.DeepEquals(templateDocument, resultDocument))
         {
             throw new TransferValidationException(
                 "Se modificó contenido situado fuera de la tabla de alumnado.");
+        }
+    }
+
+    private static void ValidateDocumentHeader(
+        ClassDocumentPlan classPlan,
+        ValidateClassDocumentsRequest request,
+        IReadOnlyDictionary<string, byte[]> template,
+        IReadOnlyDictionary<string, byte[]> result)
+    {
+        if (request.OutputOptions is null)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(request.OutputOptions.Prepared, request.Prepared)
+            || !request.OutputOptions.Headers.TryGetValue(
+                classPlan.Roster.ClassIdentifier, out var expected))
+        {
+            throw new TransferValidationException(
+                "Las cabeceras no corresponden con el lote validado.");
+        }
+
+        var header = request.Prepared.Request.Header;
+        var templateDocument = DocxXml.Parse(template[DocxNames.DocumentPart]);
+        var resultDocument = DocxXml.Parse(result[DocxNames.DocumentPart]);
+        DocxTemplateHeaderFields.LocateStrict(templateDocument, header);
+        var actual = DocxTemplateHeaderFields.LocateStrict(resultDocument, header);
+        if (!string.Equals(
+                DocxTemplateHeaderFields.ReadValue(actual.ClassTitle),
+                expected.DisplayTitle,
+                StringComparison.Ordinal)
+            || !string.Equals(
+                DocxTemplateHeaderFields.ReadValue(actual.TutorName),
+                expected.TutorName,
+                StringComparison.Ordinal))
+        {
+            throw new TransferValidationException(
+                $"La cabecera generada de {classPlan.Roster.ClassIdentifier.CanonicalCode} no coincide con los valores confirmados.");
         }
     }
 

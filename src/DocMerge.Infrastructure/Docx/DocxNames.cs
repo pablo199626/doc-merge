@@ -22,6 +22,9 @@ internal static class DocxNames
     internal static readonly XNamespace ContentTypes =
         "http://schemas.openxmlformats.org/package/2006/content-types";
 
+    internal static readonly XNamespace MarkupCompatibility =
+        "http://schemas.openxmlformats.org/markup-compatibility/2006";
+
     internal static readonly XName Value = Word + "val";
     internal static readonly XName StyleId = Word + "styleId";
 

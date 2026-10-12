@@ -6,7 +6,9 @@ namespace DocMerge.Application.Generation;
 /// <param name="Prepared">The prepared class-generation batch.</param>
 /// <param name="WorkingDirectory">The private temporary output directory.</param>
 /// <param name="SortingProfile">The profile used to order generated student rows.</param>
+/// <param name="OutputOptions">Optional confirmed document-header values.</param>
 public sealed record GenerateClassDocumentsRequest(
     PreparedClassGeneration Prepared,
     string WorkingDirectory,
-    SortingProfile SortingProfile);
+    SortingProfile SortingProfile,
+    ClassGenerationOutputOptions? OutputOptions = null);

@@ -1,3 +1,4 @@
+using System.Text;
 using DocMerge.Application.Files;
 using DocMerge.Application.Generation;
 using DocMerge.Domain.Generation;
@@ -10,7 +11,7 @@ namespace DocMerge.Infrastructure.Tests.Docx;
 public sealed class DocxClassGenerationTests
 {
     [Fact]
-    public async Task GenerateAndValidateAsync_FoundAndMissingStudents_PreservesDataAndMarksMissing()
+    public async Task GenerateAndValidateAsync_FoundAndMissingStudents_PreservesDataWithoutHighlightingMissing()
     {
         using var temporary = new TemporaryDirectory();
         var templatePath = temporary.File("template.docx");
@@ -45,7 +46,7 @@ public sealed class DocxClassGenerationTests
         Assert.Equal(["ALUMNO, DOS", "ALUMNO, UNO"],
             result.Records.Select(record => record.OriginalName));
         Assert.Contains("MEDIDA", result.Records[1].RowXml, StringComparison.Ordinal);
-        Assert.Contains("FFF2CC", result.Records[0].RowXml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<w:shd", result.Records[0].RowXml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -89,7 +90,8 @@ public sealed class DocxClassGenerationTests
 
     private static async Task<PreparedClassGeneration> PrepareAsync(
         string templatePath,
-        string historicalPath)
+        string historicalPath,
+        bool includeSecondClass = false)
     {
         var template = await new DocxTemplateReader().ReadAsync(
             templatePath, "Nombre y Apellidos", CancellationToken.None);
@@ -107,9 +109,22 @@ public sealed class DocxClassGenerationTests
             entries,
             1,
             hasDeclaredTotal: false);
+        var rosters = includeSecondClass
+            ? new[]
+            {
+                roster,
+                new ClassRoster(
+                    templatePath + ".second.pdf",
+                    template.Sha256,
+                    new ClassIdentifier("ESO", 2, "B"),
+                    entries,
+                    1,
+                    hasDeclaredTotal: false),
+            }
+            : [roster];
         var planner = new ClassGenerationPlanner(new HistoricalStudentResolver());
         var plan = planner.Create(
-            [roster], new HistoricalStudentIndex(historical.Candidates));
+            rosters, new HistoricalStudentIndex(historical.Candidates));
         var request = new ClassGenerationRequest(
             Path.GetDirectoryName(historicalPath)!,
             Path.GetDirectoryName(templatePath)!,
@@ -168,6 +183,44 @@ public sealed class DocxClassGenerationTests
             service.ExecuteAsync(request, CancellationToken.None));
 
         Assert.False(Directory.Exists(request.OutputDirectory));
+    }
+
+    [Fact]
+    public async Task GenerateAndValidateAsync_MultipleClasses_WritesEachConfirmedHeader()
+    {
+        using var temporary = new TemporaryDirectory();
+        var templatePath = temporary.File("template.docx");
+        var historicalPath = temporary.File("historical.docx");
+        DocxTestPackage.Create(
+            templatePath,
+            [DocxTestPackage.Header + DocxTestPackage.EmptyRow],
+            documentHeaderFields: true);
+        DocxTestPackage.Create(
+            historicalPath,
+            [DocxTestPackage.Header + DocxTestPackage.PersonRow("Alumno Uno", "MEDIDA")],
+            source: true);
+        var prepared = await PrepareAsync(templatePath, historicalPath, includeSecondClass: true);
+        var headers = prepared.Plan.Classes.ToDictionary(
+            item => item.Roster.ClassIdentifier,
+            item => item.Roster.ClassIdentifier.Group == "A"
+                ? new ClassHeaderValues("2 ESO A & apoyo", "María <Pérez>")
+                : new ClassHeaderValues("2 ESO B", string.Empty));
+        var options = new ClassGenerationOutputOptions(prepared, headers);
+        var profile = SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier);
+
+        var generated = await new DocxClassDocumentGenerator().GenerateAsync(
+            new GenerateClassDocumentsRequest(prepared, temporary.File("working"), profile, options),
+            CancellationToken.None);
+        await new DocxClassGenerationValidator(new DocxDocumentReader()).ValidateAsync(
+            new ValidateClassDocumentsRequest(prepared, generated, profile, options),
+            CancellationToken.None);
+
+        Assert.Equal(2, generated.Count);
+        var firstXml = Encoding.UTF8.GetString(
+            DocxTestPackage.ReadParts(generated.Single(item =>
+                item.ClassIdentifier.Group == "A").Path)["word/document.xml"]);
+        Assert.Contains("2 ESO A &amp; apoyo", firstXml, StringComparison.Ordinal);
+        Assert.Contains("María &lt;Pérez&gt;", firstXml, StringComparison.Ordinal);
     }
 
     private sealed class StaticInputDiscovery(GenerationInputSet inputs) : IGenerationInputDiscovery

@@ -94,6 +94,19 @@ Antes de generar y antes de publicar compara de nuevo el conjunto descubierto y
 los hashes. Las carpetas temporales `.docmerge_*` quedan fuera del descubrimiento
 para que una salida situada dentro del árbol histórico no invalide su propio plan.
 
+El tercer paso permite editar, para todas las clases, un título visible y el
+tutor o tutora opcional. Los valores se asocian a `ClassIdentifier`, no al texto
+editable ni a la posición de una fila, y se capturan en una instantánea antes de
+ejecutar. Navegar entre revisión y generación conserva el borrador; cambiar una
+entrada invalida el plan y reinicia las cabeceras al volver a analizar. Esta
+edición no relee alumnado ni modifica el matching.
+
+La WPF selecciona inicialmente la «Plantilla estándar de DocMerge». Su identidad
+incluida y su estado de validación documental se muestran por separado. Puede
+reemplazarse por una plantilla externa y restaurarse; cualquiera de esos cambios
+obliga a volver a selección y validar un plan nuevo. La ruta privada de la copia
+de trabajo incluida no se presenta al usuario.
+
 ## Identidad y ordenación
 
 `IdentityNormalizer` conserva exactamente el contrato certificado y no debe
@@ -143,7 +156,51 @@ La fila generada combina:
 
 No se reconstruyen documentos ni tablas desde texto. Los alumnos ausentes o no
 resueltos conservan únicamente el nombre del PDF, dejan vacías las demás
-columnas y reciben sombreado `FFF2CC` en la celda del nombre.
+columnas y conservan el formato neutro de la fila prototipo, sin sombreado especial.
+
+### Cabecera visible por clase
+
+Una plantilla que admita personalización contiene exactamente dos controles de
+contenido de texto simple en párrafos distintos de la misma celda del bloque
+inicial del cuerpo, antes de la tabla de alumnado:
+
+- `DocMerge.ClassTitle` para el título visible;
+- `DocMerge.TutorName` para el tutor o tutora opcional.
+
+Los controles no pueden estar en encabezados técnicos, pies, cuadros de texto,
+filas repetidas ni dentro de la tabla de alumnado. La generación cambia solo sus
+valores y conserva su formato. Un tutor vacío mantiene el párrafo y el espacio
+previsto sin introducir un placeholder. La validación compara el resto del
+documento y rechaza modificaciones no autorizadas.
+
+Una plantilla externa sin ninguna etiqueta reservada sigue siendo compatible con
+la generación anterior y deshabilita la edición. Una sola etiqueta, duplicados o
+una ubicación inválida hacen incompatible la plantilla para evitar una
+personalización parcial.
+
+El título es obligatorio, no admite saltos ni controles y tiene un máximo de 60
+caracteres percibidos. El tutor es opcional, con máximo de 120. El texto no vacío
+se conserva literalmente; no se trunca ni se cambia de caja. Para las clases ESO,
+el valor inicial legible se forma como `2º ESO C` sin cambiar `2ESOC`, que continúa
+siendo la identidad estable. En la plantilla oficial, título y tutor ocupan líneas
+consecutivas centradas, manteniendo vacío el segundo párrafo cuando no se indica tutor.
+
+### Plantilla oficial incluida
+
+Infrastructure incorpora como recurso `StandardClassTemplate.v1.docx`:
+
+- identificador `standard-class`;
+- versión de plantilla `1`;
+- formato `academic-measures-three-column`;
+- contrato de cabecera `1`;
+- SHA-256 `f70a3e38d42268eda04c92f0442f2c489c2ce57bb033c042b7b9c8200baa9670`.
+
+El recurso público fue preparado y saneado sin alterar el original privado. En
+ejecución se materializa una copia verificada bajo el perfil local del usuario,
+con bloqueo por sesión y limpieza al cerrar. No se escribe en la instalación ni
+se requiere el repositorio, Internet o permisos administrativos. La copia queda
+sometida a los mismos controles de estructura e integridad que una plantilla
+externa.
 
 ## Incidencias
 
@@ -184,7 +241,8 @@ Bloquean la publicación los problemas estructurales, incluidos:
 ## Límites actuales y siguientes iteraciones
 
 - La primera WPF cubre revisión de solo lectura; edición y resolución manual
-  quedan expresamente fuera de esta release.
+  del alumnado quedan expresamente fuera de esta release; solo se editan los dos
+  valores de cabecera de salida descritos arriba.
 - Los conflictos se representan mediante modelos e incidencias estructuradas;
   la interfaz los explica, pero no permite elegir o editar una resolución.
 - El CLI genera filas vacías señalizadas para ausencias, contradicciones y
@@ -249,3 +307,15 @@ oscuro, las composiciones amplia y compacta a 1366×768, el lateral expandido,
 el CTA de transición y la tabla rediseñada. `release-desktop/DocMerge.exe` conserva versión
 `2.1.0.0`/`2.1.0`, tamaño 152.639.291 bytes y SHA-256
 `58bbdc51669b940a1f08929c8e730805fd1b904c7c1d04cef6a9ca242b610429`.
+
+La ampliación de cabeceras y plantilla incluida se verificó desde fuente el 12 de
+octubre de 2026 con 143 pruebas: Domain 40, Application 15, Infrastructure 43,
+Console 10 y WPF 35. También se ejecutaron simulación y generación real del
+corpus con la plantilla oficial, produciendo 4 clases, 94 alumnos y las 76
+incidencias previstas. La plantilla corregida conserva las declaraciones XML de
+todos los prefijos indicados por `mc:Ignorable`; el lector rechaza estas
+referencias si su espacio de nombres no está declarado. Los cuatro resultados
+superaron las comprobaciones ZIP y de compatibilidad XML. No se publicó un
+ejecutable nuevo. El entorno sigue sin Word o LibreOffice accesible para
+automatizar la inspección visual, que permanece como comprobación manual
+pendiente antes de distribuir una nueva entrega.

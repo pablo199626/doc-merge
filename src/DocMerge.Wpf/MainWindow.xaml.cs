@@ -116,10 +116,24 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         SystemParameters.StaticPropertyChanged += OnSystemParametersChanged;
         ApplySidebarLayout(useAnimation: false);
+        await _viewModel.InitializeAsync();
+    }
+
+    private void GenerateButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (Keyboard.FocusedElement is TextBox textBox)
+        {
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        }
+
+        if (_viewModel.GenerateCommand.CanExecute(parameter: null))
+        {
+            _viewModel.GenerateCommand.Execute(parameter: null);
+        }
     }
 
     private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)

@@ -39,6 +39,8 @@ public sealed class InputSelectionViewModel : ViewModelBase
     private int? _count;
     private bool _isBusy;
     private InputSelectionState _state;
+    private string? _displayNameOverride;
+    private bool _isBundled;
 
     /// <summary>Initializes an input card.</summary>
     public InputSelectionViewModel(InputKind kind, string title, string description)
@@ -112,6 +114,15 @@ public sealed class InputSelectionViewModel : ViewModelBase
     /// <summary>Gets whether validation failed.</summary>
     public bool HasError => !string.IsNullOrWhiteSpace(Error);
 
+    /// <summary>Gets whether this selection is the official template included with DocMerge.</summary>
+    public bool IsBundled => _isBundled;
+
+    /// <summary>Gets whether the official template can replace the current external selection.</summary>
+    public bool CanRestoreBundled => Kind == InputKind.Template && HasSelection && !IsBundled;
+
+    /// <summary>Gets whether this selection may be removed instead of replaced.</summary>
+    public bool CanRemoveSelection => Kind != InputKind.Template && HasSelection;
+
     /// <summary>Gets the explicit presentation state.</summary>
     public InputSelectionState State
     {
@@ -121,8 +132,15 @@ public sealed class InputSelectionViewModel : ViewModelBase
 
     /// <summary>Gets the selected file or directory name.</summary>
     public string DisplayName => Path is null
-        ? string.Empty
-        : GetDisplayName(Path);
+        ? _displayNameOverride ?? string.Empty
+        : _displayNameOverride
+            ?? GetDisplayName(Path);
+
+    /// <summary>Gets a readable source without exposing an internal bundled-template path.</summary>
+    public string DisplayLocation => IsBundled
+        ? "Incluida con DocMerge"
+        : Path
+            ?? string.Empty;
 
     /// <summary>Gets the appropriate browse action label.</summary>
     public string BrowseActionText => HasSelection ? "Cambiar" : "Examinar…";
@@ -130,11 +148,39 @@ public sealed class InputSelectionViewModel : ViewModelBase
     /// <summary>Sets a path that passed immediate selection checks.</summary>
     public void Select(string path)
     {
+        _displayNameOverride = null;
+        _isBundled = false;
         Path = System.IO.Path.GetFullPath(path);
         Status = "Seleccionado · pendiente de analizar";
         Error = null;
         Count = null;
         State = InputSelectionState.Selected;
+        NotifyTemplateSourceChanged();
+    }
+
+    /// <summary>Shows the included template while its private working copy is prepared.</summary>
+    public void SetBundledPending(string displayName)
+    {
+        _displayNameOverride = displayName;
+        _isBundled = true;
+        Path = null;
+        Status = "Incluida con DocMerge · preparando copia segura…";
+        Error = null;
+        State = InputSelectionState.Analyzing;
+        NotifyTemplateSourceChanged();
+    }
+
+    /// <summary>Selects a verified private working copy of the included template.</summary>
+    public void SelectBundled(string path, string displayName)
+    {
+        _displayNameOverride = displayName;
+        _isBundled = true;
+        Path = System.IO.Path.GetFullPath(path);
+        Status = "Incluida con DocMerge · pendiente de analizar";
+        Error = null;
+        Count = null;
+        State = InputSelectionState.Selected;
+        NotifyTemplateSourceChanged();
     }
 
     /// <summary>Marks this input as being analyzed.</summary>
@@ -181,12 +227,24 @@ public sealed class InputSelectionViewModel : ViewModelBase
     /// <summary>Clears the selection.</summary>
     public void Clear()
     {
+        _displayNameOverride = null;
+        _isBundled = false;
         Path = null;
         Status = "Sin seleccionar";
         Error = null;
         Count = null;
         IsBusy = false;
         State = InputSelectionState.Empty;
+        NotifyTemplateSourceChanged();
+    }
+
+    private void NotifyTemplateSourceChanged()
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(DisplayLocation));
+        OnPropertyChanged(nameof(IsBundled));
+        OnPropertyChanged(nameof(CanRestoreBundled));
+        OnPropertyChanged(nameof(CanRemoveSelection));
     }
 
     private static string GetDisplayName(string path)

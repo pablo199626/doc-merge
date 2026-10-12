@@ -42,9 +42,9 @@
                     </Border>
                     <StackPanel Grid.Column="1" Margin="9,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12" TextWrapping="NoWrap" />
-                        <TextBlock Text="{Binding Path}" Style="{StaticResource MutedText}"
+                        <TextBlock Text="{Binding DisplayLocation}" Style="{StaticResource MutedText}"
                                    FontSize="10" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding Path}" />
+                                    ToolTip="{Binding DisplayLocation}" />
                         <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SuccessBrush}"
                                    FontSize="10" TextWrapping="NoWrap" />
                     </StackPanel>
@@ -128,9 +128,9 @@
                                     <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="14"
                                                TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                                ToolTip="{Binding DisplayName}" />
-                                    <TextBlock Text="{Binding Path}" Style="{StaticResource MutedText}"
+                                    <TextBlock Text="{Binding DisplayLocation}" Style="{StaticResource MutedText}"
                                                FontSize="11" Margin="0,3,0,0" TextWrapping="NoWrap"
-                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
+                                                TextTrimming="CharacterEllipsis" ToolTip="{Binding DisplayLocation}" />
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock x:Name="InputStatusText" Text="{Binding Status}"
                                                    Foreground="{DynamicResource AccentBrush}" FontSize="11"
@@ -152,14 +152,18 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Button Content="{Binding BrowseActionText}"
                                 Command="{Binding DataContext.BrowseInputCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" MinHeight="40" />
-                        <Button Grid.Column="1" Content="Quitar" Margin="8,0,0,0" MinHeight="40"
+                        <Button Grid.Column="1" Content="Restaurar incluida" Margin="8,0,0,0" MinHeight="40"
+                                Command="{Binding DataContext.RestoreIncludedTemplateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Visibility="{Binding CanRestoreBundled, Converter={StaticResource BooleanVisibility}}" />
+                        <Button Grid.Column="2" Content="Quitar" Margin="8,0,0,0" MinHeight="40"
                                 Command="{Binding DataContext.RemoveInputCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}"
-                                Visibility="{Binding HasSelection, Converter={StaticResource BooleanVisibility}}" />
+                                Visibility="{Binding CanRemoveSelection, Converter={StaticResource BooleanVisibility}}" />
                     </Grid>
                 </Grid>
             </Border>
@@ -1026,51 +1030,217 @@
 
                 <Grid Visibility="{Binding IsGenerationStep, Converter={StaticResource BooleanVisibility}}">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <StackPanel Margin="6,0,6,15">
-                        <TextBlock Text="Generar documentos" Style="{StaticResource Heading}" />
-                        <TextBlock Text="Elige el nombre y la ubicación de una carpeta nueva. Se ejecutará exactamente el plan revisado."
-                                   Style="{StaticResource MutedText}" />
-                    </StackPanel>
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel MaxWidth="850" HorizontalAlignment="Center">
-                            <Border Style="{StaticResource Card}" Margin="6">
-                                <StackPanel>
-                                    <TextBlock Text="Carpeta nueva de salida" Style="{StaticResource SectionHeading}" />
-                                    <Grid Margin="0,14,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding OutputParent, Mode=OneWay}" IsReadOnly="True" ToolTip="Carpeta contenedora" />
-                                        <Button Grid.Column="1" Content="Elegir ubicación…" Margin="10,0,0,0"
-                                                Command="{Binding BrowseOutputCommand}" />
-                                    </Grid>
-                                    <TextBlock Text="Nombre de la carpeta nueva" Margin="0,14,0,5" />
-                                    <TextBox Text="{Binding OutputFolderName, UpdateSourceTrigger=PropertyChanged}" />
-                                    <TextBlock Text="{Binding OutputDirectory}" Margin="0,10,0,0" Style="{StaticResource MutedText}" />
-                                    <TextBlock Text="{Binding OutputError}" Margin="0,6,0,0" Foreground="{DynamicResource ErrorBrush}" />
-                                </StackPanel>
-                            </Border>
-                            <Border Style="{StaticResource Card}" Margin="6,12,6,6">
-                                <StackPanel>
-                                    <TextBlock Text="Resumen del lote revisado" Style="{StaticResource SectionHeading}" />
-                                    <TextBlock Text="{Binding BatchSummary}" Margin="0,10,0,0" FontWeight="SemiBold" />
-                                    <TextBlock Text="Los avisos no bloqueantes se conservarán. Los filtros de revisión no modifican este lote."
-                                               Margin="0,7,0,0" Style="{StaticResource MutedText}" />
-                                    <TextBlock Text="{Binding ProgressText}" Margin="0,14,0,0" />
-                                    <TextBlock Text="{Binding FinalStatus}" Margin="0,10,0,0" FontWeight="SemiBold"
-                                               automation:AutomationProperties.LiveSetting="Polite" />
-                                    <Button Content="Abrir carpeta de salida" Margin="0,12,0,0" HorizontalAlignment="Left"
-                                            Command="{Binding OpenOutputCommand}" />
-                                </StackPanel>
-                            </Border>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <UniformGrid Columns="3" Margin="0,0,0,10">
+                                <UniformGrid.Style>
+                                    <Style TargetType="UniformGrid">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </UniformGrid.Style>
+                                <ContentControl Content="{Binding HistoricalInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
+                                <ContentControl Content="{Binding RosterInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
+                                <ContentControl Content="{Binding TemplateInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
+                            </UniformGrid>
+                            <StackPanel Margin="0,0,0,10">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <ContentControl Content="{Binding HistoricalInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
+                                <ContentControl Content="{Binding RosterInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
+                                <ContentControl Content="{Binding TemplateInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
+                            </StackPanel>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Margin="5" Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Cabecera de los documentos" Style="{StaticResource Heading}" />
+                                            <WrapPanel Grid.Column="1" HorizontalAlignment="Right">
+                                                <Button Content="Cambiar plantilla" Margin="5,0"
+                                                        Command="{Binding BrowseInputCommand}"
+                                                        CommandParameter="{Binding TemplateInput}" />
+                                                <Button Content="Restaurar incluida" Margin="5,0"
+                                                        Command="{Binding RestoreIncludedTemplateCommand}"
+                                                        Visibility="{Binding TemplateInput.CanRestoreBundled, Converter={StaticResource BooleanVisibility}}" />
+                                            </WrapPanel>
+                                        </Grid>
+                                        <TextBlock Text="Personaliza el nombre visible de cada clase y el tutor o tutora que aparecerá en el documento."
+                                                   Style="{StaticResource MutedText}" Margin="0,3,0,12" />
+                                        <TextBlock Text="{Binding HeaderCustomizationMessage}" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,12" />
+
+                                        <Grid>
+                                            <Grid.Style>
+                                                <Style TargetType="Grid">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Grid.Style>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid Background="{DynamicResource SurfaceAltBrush}" Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="140" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="Clase detectada" FontWeight="SemiBold" Margin="10,8" />
+                                                <TextBlock Grid.Column="1" Text="Nombre que aparecerá en el documento" FontWeight="SemiBold" Margin="10,8" />
+                                                <TextBlock Grid.Column="2" Text="Tutor/a (opcional)" FontWeight="SemiBold" Margin="10,8" />
+                                            </Grid>
+                                            <ItemsControl Grid.Row="1" ItemsSource="{Binding ClassHeaders}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,3">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="140" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding DetectedClass}" Margin="10,8" VerticalAlignment="Center" />
+                                                            <StackPanel Grid.Column="1" Margin="7,2">
+                                                                <TextBox IsEnabled="{Binding IsEditable}"
+                                                                         Text="{Binding DisplayTitle, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                                                <TextBlock Text="{Binding TitleError}" Foreground="{DynamicResource ErrorBrush}"
+                                                                           FontSize="10" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="2" Margin="7,2">
+                                                                <TextBox IsEnabled="{Binding IsEditable}"
+                                                                         Text="{Binding TutorName, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                                                <TextBlock Text="{Binding TutorError}" Foreground="{DynamicResource ErrorBrush}"
+                                                                           FontSize="10" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Grid>
+
+                                        <ItemsControl ItemsSource="{Binding ClassHeaders}">
+                                            <ItemsControl.Style>
+                                                <Style TargetType="ItemsControl">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ItemsControl.Style>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,4">
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding DetectedClass}" FontWeight="SemiBold" />
+                                                            <TextBlock Text="Nombre que aparecerá en el documento" Margin="0,8,0,4" />
+                                                            <TextBox IsEnabled="{Binding IsEditable}"
+                                                                     Text="{Binding DisplayTitle, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                                            <TextBlock Text="{Binding TitleError}" Foreground="{DynamicResource ErrorBrush}"
+                                                                       FontSize="10" TextWrapping="Wrap" />
+                                                            <TextBlock Text="Tutor/a (opcional)" Margin="0,8,0,4" />
+                                                            <TextBox IsEnabled="{Binding IsEditable}"
+                                                                     Text="{Binding TutorName, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                                            <TextBlock Text="{Binding TutorError}" Foreground="{DynamicResource ErrorBrush}"
+                                                                       FontSize="10" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Border Margin="5">
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                                    <Setter Property="Grid.ColumnSpan" Value="2" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="Carpeta de salida" Style="{StaticResource SectionHeading}" />
+                                        <Grid Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Text="{Binding OutputParent, Mode=OneWay}" IsReadOnly="True" />
+                                            <Button Grid.Column="1" Content="Examinar…" Margin="8,0,0,0" Command="{Binding BrowseOutputCommand}" />
+                                        </Grid>
+                                        <TextBlock Text="Nombre de la carpeta nueva" Margin="0,10,0,4" />
+                                        <TextBox Text="{Binding OutputFolderName, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="{Binding OutputDirectory}" Margin="0,8,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding OutputError}" Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap" Margin="0,5,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Margin="5">
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
+                                                    <Setter Property="Grid.Row" Value="1" />
+                                                    <Setter Property="Grid.Column" Value="0" />
+                                                    <Setter Property="Grid.ColumnSpan" Value="2" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="Resumen de generación" Style="{StaticResource SectionHeading}" />
+                                        <TextBlock Text="{Binding BatchSummary}" Margin="0,10,0,0" FontWeight="SemiBold" />
+                                        <TextBlock Text="Los avisos no bloqueantes se conservarán; los filtros no modifican el lote."
+                                                   Margin="0,7,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding ProgressText}" Margin="0,12,0,0" />
+                                        <TextBlock Text="{Binding FinalStatus}" Margin="0,8,0,0" FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" automation:AutomationProperties.LiveSetting="Polite" />
+                                        <Button Content="Abrir carpeta de salida" Margin="0,10,0,0" HorizontalAlignment="Left"
+                                                Command="{Binding OpenOutputCommand}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                         </StackPanel>
                     </ScrollViewer>
-                    <Grid Grid.Row="2" Margin="6,12,6,0">
+                    <Grid Grid.Row="1" Margin="6,12,6,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -1080,7 +1250,7 @@
                         <Button Content="Volver a revisión" Command="{Binding BackToReviewCommand}" />
                         <Button Grid.Column="2" Content="Cancelar" Margin="8,0" Command="{Binding CancelCommand}" />
                         <Button Grid.Column="3" Content="Generar documentos" Style="{StaticResource PrimaryActionButton}"
-                                Command="{Binding GenerateCommand}" />
+                                Click="GenerateButton_Click" />
                     </Grid>
                 </Grid>
             </Grid>

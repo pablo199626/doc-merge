@@ -63,6 +63,7 @@ public sealed class DocxTemplateReader : IGenerationTemplateReader
         ValidateColumnCount(DocxXml.RowCells(prototype).Count, "La fila de prototipo");
         var headers = headerCells.Select(cell =>
             IdentityNormalizer.NormalizeWhitespace(DocxXml.ElementText(cell))).ToArray();
+        var headerContractVersion = DocxTemplateHeaderFields.Inspect(package, document, header);
         return new GenerationTemplateSnapshot(
             path,
             Convert.ToHexStringLower(SHA256.HashData(content)),
@@ -70,7 +71,8 @@ public sealed class DocxTemplateReader : IGenerationTemplateReader
             location.HeaderIndex,
             location.NameColumnIndex,
             headers,
-            prototype.ToString(SaveOptions.DisableFormatting));
+            prototype.ToString(SaveOptions.DisableFormatting),
+            headerContractVersion);
     }
 
     private static bool IsEmptyRow(XElement row)

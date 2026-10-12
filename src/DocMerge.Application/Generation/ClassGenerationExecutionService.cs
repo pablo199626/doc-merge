@@ -42,6 +42,7 @@ public sealed class ClassGenerationExecutionService
         var prepared = request.Prepared;
         var sortingProfile = request.SortingProfile;
         ArgumentException.ThrowIfNullOrWhiteSpace(request.OutputDirectory);
+        ValidateOutputOptions(prepared, request.OutputOptions);
         if (prepared.Plan.HasBlockingIssues)
         {
             throw new OperationValidationException(
@@ -55,12 +56,13 @@ public sealed class ClassGenerationExecutionService
         {
             progress?.Report(new ClassGenerationProgress(ClassGenerationStage.GeneratingDocuments));
             var generationRequest = new GenerateClassDocumentsRequest(
-                prepared, temporary, sortingProfile);
+                prepared, temporary, sortingProfile, request.OutputOptions);
             var generated = await _generator.GenerateAsync(
                 generationRequest, cancellationToken);
             progress?.Report(new ClassGenerationProgress(ClassGenerationStage.ValidatingDocuments));
             await _validator.ValidateAsync(
-                new ValidateClassDocumentsRequest(prepared, generated, sortingProfile),
+                new ValidateClassDocumentsRequest(
+                    prepared, generated, sortingProfile, request.OutputOptions),
                 cancellationToken);
             progress?.Report(new ClassGenerationProgress(ClassGenerationStage.VerifyingInputs));
             await VerifyInputsAsync(prepared, cancellationToken);
@@ -79,6 +81,28 @@ public sealed class ClassGenerationExecutionService
         finally
         {
             _publisher.DeleteIfExists(temporary);
+        }
+    }
+
+    private static void ValidateOutputOptions(
+        PreparedClassGeneration prepared,
+        ClassGenerationOutputOptions? options)
+    {
+        if (options is null)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(options.Prepared, prepared))
+        {
+            throw new OperationValidationException(
+                "Las cabeceras pertenecen a un lote distinto del revisado.");
+        }
+
+        if (!prepared.Template.SupportsDocumentHeader)
+        {
+            throw new OperationValidationException(
+                "La plantilla seleccionada no admite personalización de cabecera.");
         }
     }
 

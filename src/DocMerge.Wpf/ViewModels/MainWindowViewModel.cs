@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Reflection;
+using DocMerge.Application.Documents;
 using DocMerge.Application.Errors;
 using DocMerge.Application.Generation;
 using DocMerge.Domain.Generation;
@@ -31,6 +32,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IThemeService _themeService;
     private readonly IDesktopPreferencesService _preferences;
     private readonly ISystemFolderService _folderService;
+    private readonly IBundledGenerationTemplateProvider? _bundledTemplateProvider;
     private PreparedClassGeneration? _prepared;
     private CancellationTokenSource? _operationCancellation;
     private int _inputRevision;
@@ -50,6 +52,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private string _outputFolderName = "Clases generadas";
     private string? _publishedDirectory;
     private string? _finalStatus;
+    private bool _isBundledTemplateInitialized;
 
     /// <summary>Initializes the desktop workflow.</summary>
     public MainWindowViewModel(
@@ -58,7 +61,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         IFileDialogService dialogs,
         IThemeService themeService,
         IDesktopPreferencesService preferences,
-        ISystemFolderService folderService)
+        ISystemFolderService folderService,
+        IBundledGenerationTemplateProvider? bundledTemplateProvider = null)
     {
         _preparationService = preparationService ?? throw new ArgumentNullException(nameof(preparationService));
         _executionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
@@ -66,6 +70,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _folderService = folderService ?? throw new ArgumentNullException(nameof(folderService));
+        _bundledTemplateProvider = bundledTemplateProvider;
         _isDark = themeService.IsDark;
         _selectedThemePreference = themeService.Preference;
         _isSidebarExpanded = preferences.Load().IsSidebarExpanded;
@@ -82,10 +87,18 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         TemplateInput = new InputSelectionViewModel(
             InputKind.Template,
             "Plantilla (DOCX)",
-            "Documento base para generar cada clase");
+            "Plantilla estándar de DocMerge");
+        if (_bundledTemplateProvider is not null)
+        {
+            TemplateInput.SetBundledPending("Plantilla estándar de DocMerge");
+        }
 
         BrowseInputCommand = new RelayCommand(BrowseInput, _ => !IsBusy);
         RemoveInputCommand = new RelayCommand(RemoveInput, _ => !IsBusy);
+        RestoreIncludedTemplateCommand = new AsyncRelayCommand(
+            RestoreIncludedTemplateAsync,
+            () => !IsBusy && TemplateInput.CanRestoreBundled,
+            HandleUnexpectedError);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, CanAnalyze, HandleUnexpectedError);
         CancelCommand = new RelayCommand(_ => CancelOperation(), _ => IsBusy);
         BackToFilesCommand = new RelayCommand(_ => CurrentStep = 1, _ => !IsBusy);
@@ -128,6 +141,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets all structured issues in the prepared batch.</summary>
     public ObservableCollection<ReviewIssueViewModel> Issues { get; } = [];
 
+    /// <summary>Gets document-header values for every class in the reviewed batch.</summary>
+    public ObservableCollection<ClassHeaderViewModel> ClassHeaders { get; } = [];
+
     /// <summary>Gets available review filters.</summary>
     public IReadOnlyList<string> StatusFilters { get; } =
     [
@@ -146,6 +162,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     /// <summary>Gets the command that removes one input.</summary>
     public RelayCommand RemoveInputCommand { get; }
+
+    /// <summary>Gets the command that restores the official template.</summary>
+    public AsyncRelayCommand RestoreIncludedTemplateCommand { get; }
 
     /// <summary>Gets the command that prepares a review plan.</summary>
     public AsyncRelayCommand AnalyzeCommand { get; }
@@ -445,6 +464,17 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets whether blocking issues prevent final generation.</summary>
     public bool HasBlockingIssues => _prepared?.Plan.HasBlockingIssues == true;
 
+    /// <summary>Gets whether the selected template supports title and tutor fields.</summary>
+    public bool IsHeaderCustomizationAvailable => _prepared?.Template.SupportsDocumentHeader == true;
+
+    /// <summary>Gets guidance for the selected template's header support.</summary>
+    public string HeaderCustomizationMessage => IsHeaderCustomizationAvailable
+        ? "El tutor o tutora es opcional. Si se deja vacío, se conservará el espacio previsto en la plantilla."
+        : "Esta plantilla es compatible con la generación, pero no admite personalizar la cabecera.";
+
+    /// <summary>Gets whether any editable document header is invalid.</summary>
+    public bool HasHeaderErrors => ClassHeaders.Any(item => item.HasErrors);
+
     /// <summary>Gets or sets the existing parent folder for output.</summary>
     public string? OutputParent
     {
@@ -531,6 +561,30 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets whether review can advance to final generation.</summary>
     public bool CanContinueToGeneration => _prepared is not null && !HasBlockingIssues && !IsBusy;
 
+    /// <summary>Prepares the included template without exposing its internal path.</summary>
+    public async Task InitializeAsync()
+    {
+        if (_bundledTemplateProvider is null || _isBundledTemplateInitialized)
+        {
+            return;
+        }
+
+        _isBundledTemplateInitialized = true;
+        try
+        {
+            var template = await _bundledTemplateProvider.GetAsync(CancellationToken.None);
+            TemplateInput.SelectBundled(template.Path, template.DisplayName);
+        }
+        catch (Exception error) when (error is IOException
+            or UnauthorizedAccessException
+            or DocMergeException)
+        {
+            TemplateInput.SetError($"No se pudo preparar la plantilla incluida: {error.Message}");
+        }
+
+        RefreshCommands();
+    }
+
     /// <summary>Accepts a path from drag and drop after validating its immediate type.</summary>
     public void SelectDroppedPath(InputKind kind, string path)
     {
@@ -572,6 +626,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         _themeService.Changed -= OnThemeChanged;
+        ClearClassHeaders();
         _operationCancellation?.Cancel();
         _operationCancellation?.Dispose();
         _operationCancellation = null;
@@ -612,9 +667,27 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         InvalidatePreparedReview();
     }
 
+    private async Task RestoreIncludedTemplateAsync()
+    {
+        if (_bundledTemplateProvider is null)
+        {
+            return;
+        }
+
+        var template = await _bundledTemplateProvider.GetAsync(CancellationToken.None);
+        if (TemplateInput.IsBundled
+            && string.Equals(TemplateInput.Path, template.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        TemplateInput.SelectBundled(template.Path, template.DisplayName);
+        InvalidatePreparedReview();
+    }
+
     private void RemoveInput(object? parameter)
     {
-        if (parameter is InputSelectionViewModel input)
+        if (parameter is InputSelectionViewModel { Kind: not InputKind.Template } input)
         {
             input.Clear();
             InvalidatePreparedReview();
@@ -640,6 +713,14 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                 _operationCancellation.Token);
             if (revision != _inputRevision)
             {
+                return;
+            }
+
+            if (TemplateInput.IsBundled && !prepared.Template.SupportsDocumentHeader)
+            {
+                TemplateInput.SetError(
+                    "La plantilla estándar incluida no contiene los campos de clase y tutor requeridos.");
+                GeneralError = "La plantilla incluida es incompatible. No se ha creado un plan de revisión.";
                 return;
             }
 
@@ -691,7 +772,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             var request = new ClassGenerationExecutionRequest(
                 _prepared,
                 OutputDirectory,
-                SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier));
+                SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier),
+                CreateOutputOptions());
             var result = await Task.Run(
                 () => _executionService.ExecuteAsync(
                     request, _operationCancellation.Token, progress),
@@ -739,7 +821,21 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private bool CanGenerate() => CanContinueToGeneration
         && OutputDirectory is not null
-        && OutputError is null;
+        && OutputError is null
+        && !HasHeaderErrors;
+
+    private ClassGenerationOutputOptions? CreateOutputOptions()
+    {
+        if (_prepared is null || !IsHeaderCustomizationAvailable)
+        {
+            return null;
+        }
+
+        var headers = ClassHeaders.ToDictionary(
+            item => item.ClassIdentifier,
+            item => item.CreateValues());
+        return new ClassGenerationOutputOptions(_prepared, headers);
+    }
 
     private void BrowseOutput()
     {
@@ -760,6 +856,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void BuildReview(PreparedClassGeneration prepared)
     {
+        ClearClassHeaders();
         Classes.Clear();
         Issues.Clear();
         var issues = prepared.Plan.Issues.Select(CreateReviewIssue).ToArray();
@@ -777,12 +874,20 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                 row,
                 classIssues.Where(issue => AffectsStudent(issue.Issue, row)).ToArray())).ToArray();
             Classes.Add(new ClassReviewViewModel(classPlan, students, classIssues));
+            var header = new ClassHeaderViewModel(
+                classPlan.Roster.ClassIdentifier,
+                prepared.Template.SupportsDocumentHeader);
+            header.ErrorsChanged += OnHeaderErrorsChanged;
+            ClassHeaders.Add(header);
         }
 
         SelectedClass = Classes.FirstOrDefault();
         OnPropertyChanged(nameof(BatchSummary));
         OnPropertyChanged(nameof(HasBlockingIssues));
         OnPropertyChanged(nameof(CanContinueToGeneration));
+        OnPropertyChanged(nameof(IsHeaderCustomizationAvailable));
+        OnPropertyChanged(nameof(HeaderCustomizationMessage));
+        OnPropertyChanged(nameof(HasHeaderErrors));
         RefreshCommands();
     }
 
@@ -938,6 +1043,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _prepared = null;
         Classes.Clear();
         Issues.Clear();
+        ClearClassHeaders();
         VisibleStudents.Clear();
         SelectedClass = null;
         PublishedDirectory = null;
@@ -946,7 +1052,27 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(BatchSummary));
         OnPropertyChanged(nameof(HasBlockingIssues));
         OnPropertyChanged(nameof(CanContinueToGeneration));
+        OnPropertyChanged(nameof(IsHeaderCustomizationAvailable));
+        OnPropertyChanged(nameof(HeaderCustomizationMessage));
+        OnPropertyChanged(nameof(HasHeaderErrors));
+        CurrentStep = 1;
         RefreshCommands();
+    }
+
+    private void ClearClassHeaders()
+    {
+        foreach (var header in ClassHeaders)
+        {
+            header.ErrorsChanged -= OnHeaderErrorsChanged;
+        }
+
+        ClassHeaders.Clear();
+    }
+
+    private void OnHeaderErrorsChanged(object? sender, System.ComponentModel.DataErrorsChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasHeaderErrors));
+        GenerateCommand.NotifyCanExecuteChanged();
     }
 
     private void StartInputAnalysis()
@@ -1094,6 +1220,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         CancelCommand.NotifyCanExecuteChanged();
         BrowseInputCommand.NotifyCanExecuteChanged();
         RemoveInputCommand.NotifyCanExecuteChanged();
+        RestoreIncludedTemplateCommand.NotifyCanExecuteChanged();
         ContinueToGenerationCommand.NotifyCanExecuteChanged();
         ShowAllIssuesCommand.NotifyCanExecuteChanged();
         BackToFilesCommand.NotifyCanExecuteChanged();

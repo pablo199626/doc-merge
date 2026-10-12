@@ -49,6 +49,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IClassDocumentGenerator, DocxClassDocumentGenerator>();
         services.AddSingleton<IDocumentReader, DocxDocumentReader>();
         services.AddSingleton<IClassGenerationValidator, DocxClassGenerationValidator>();
+        services.AddSingleton<IBundledGenerationTemplateProvider, BundledGenerationTemplateProvider>();
         services.AddSingleton<HistoricalStudentResolver>();
         services.AddSingleton<ClassGenerationPlanner>();
         services.AddSingleton<ClassGenerationService>();

@@ -43,6 +43,74 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ContinueToGenerationCommand_HeaderTemplate_CreatesEditableDefaultHeader()
+    {
+        using var fixture = new ViewModelFixture { TemplateSupportsHeader = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+
+        var header = Assert.Single(viewModel.ClassHeaders);
+        Assert.True(header.IsEditable);
+        Assert.Equal("2º ESO A", header.DisplayTitle);
+        Assert.Equal(string.Empty, header.TutorName);
+    }
+
+    [Fact]
+    public async Task GenerationHeader_NavigateBackAndForward_PreservesUserValues()
+    {
+        using var fixture = new ViewModelFixture { TemplateSupportsHeader = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+        var header = Assert.Single(viewModel.ClassHeaders);
+        header.DisplayTitle = "Segundo C — apoyo";
+        header.TutorName = "María Pérez";
+
+        viewModel.BackToReviewCommand.Execute(parameter: null);
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+
+        Assert.Same(header, Assert.Single(viewModel.ClassHeaders));
+        Assert.Equal("Segundo C — apoyo", header.DisplayTitle);
+        Assert.Equal("María Pérez", header.TutorName);
+    }
+
+    [Fact]
+    public async Task GenerationHeader_InvalidTitle_DisablesGenerationState()
+    {
+        using var fixture = new ViewModelFixture { TemplateSupportsHeader = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        var header = Assert.Single(viewModel.ClassHeaders);
+
+        header.DisplayTitle = "   ";
+
+        Assert.True(header.HasErrors);
+        Assert.True(viewModel.HasHeaderErrors);
+        Assert.Contains("no puede estar vacío", header.TitleError, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SelectInput_AfterHeaderEditing_InvalidatesPlanAndHeaders()
+    {
+        using var fixture = new ViewModelFixture { TemplateSupportsHeader = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+
+        viewModel.SelectDroppedPath(InputKind.Template, fixture.SecondTemplatePath);
+
+        Assert.True(viewModel.IsSelectionStep);
+        Assert.Empty(viewModel.ClassHeaders);
+        Assert.False(viewModel.CanContinueToGeneration);
+    }
+
+    [Fact]
     public async Task FilterReview_StatusFilter_DoesNotChangeBatchSummary()
     {
         using var fixture = new ViewModelFixture();
@@ -196,6 +264,7 @@ public sealed class MainWindowViewModelTests
             Directory.CreateDirectory(HistoricalDirectory);
             Directory.CreateDirectory(RosterDirectory);
             File.WriteAllText(TemplatePath, "template");
+            File.WriteAllText(SecondTemplatePath, "template-2");
             File.WriteAllText(HistoricalPath, "historical");
             File.WriteAllText(RosterPath, "roster");
         }
@@ -204,9 +273,12 @@ public sealed class MainWindowViewModelTests
 
         internal bool UseMixedReview { get; init; }
 
+        internal bool TemplateSupportsHeader { get; init; }
+
         internal string HistoricalDirectory => Path.Combine(_root, "history");
         private string RosterDirectory => Path.Combine(_root, "rosters");
         private string TemplatePath => Path.Combine(_root, "template.docx");
+        internal string SecondTemplatePath => Path.Combine(_root, "template-2.docx");
         private string HistoricalPath => Path.Combine(HistoricalDirectory, "history.docx");
         private string RosterPath => Path.Combine(RosterDirectory, "2A.pdf");
 
@@ -217,7 +289,7 @@ public sealed class MainWindowViewModelTests
             var preparation = new ClassGenerationService(
                 discovery,
                 new StubRosterReader(RosterPath, FailRosterRead, UseMixedReview),
-                new StubTemplateReader(TemplatePath),
+                new StubTemplateReader(TemplatePath, TemplateSupportsHeader),
                 new StubHistoricalReader(HistoricalPath, UseMixedReview),
                 new ClassGenerationPlanner(new HistoricalStudentResolver()));
             var execution = new ClassGenerationExecutionService(
@@ -289,13 +361,20 @@ public sealed class MainWindowViewModelTests
                 ordinal);
         }
 
-        private sealed class StubTemplateReader(string path) : IGenerationTemplateReader
+        private sealed class StubTemplateReader(string path, bool supportsHeader) : IGenerationTemplateReader
         {
             public Task<GenerationTemplateSnapshot> ReadAsync(
                 string ignored,
                 string header,
                 CancellationToken cancellationToken) => Task.FromResult(new GenerationTemplateSnapshot(
-                    path, "template-hash", 0, 0, 1, ["NIA", header, "Información"], "<row />"));
+                    path,
+                    "template-hash",
+                    0,
+                    0,
+                    1,
+                    ["NIA", header, "Información"],
+                    "<row />",
+                    supportsHeader ? 1 : null));
         }
 
         private sealed class StubHistoricalReader(string path, bool useMixedReview) : IHistoricalStudentReader

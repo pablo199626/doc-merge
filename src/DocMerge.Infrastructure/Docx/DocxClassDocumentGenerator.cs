@@ -9,8 +9,6 @@ namespace DocMerge.Infrastructure.Docx;
 
 public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
 {
-    private const string UnresolvedFillColor = "FFF2CC";
-
     public async Task<IReadOnlyList<GeneratedClassDocument>> GenerateAsync(
         GenerateClassDocumentsRequest request,
         CancellationToken cancellationToken)
@@ -37,6 +35,7 @@ public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
                 sources,
                 outputPath,
                 request.Prepared.Request.Header,
+                GetHeaderValues(request, classPlan),
                 cancellationToken);
             generated.Add(new GeneratedClassDocument(
                 classPlan.Roster.ClassIdentifier, outputPath));
@@ -84,6 +83,7 @@ public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
         IReadOnlyDictionary<string, DocxPackage> sources,
         string outputPath,
         string header,
+        ClassHeaderValues? headerValues,
         CancellationToken cancellationToken)
     {
         var destination = DocxPackage.FromBytes(templateBytes);
@@ -94,7 +94,43 @@ public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
         var rows = BuildRows(
             orderedPlans, prototype, template.NameColumnIndex, destination, sources, cancellationToken);
         ReplacePrototype(destination, header, rows);
+        if (headerValues is not null)
+        {
+            WriteDocumentHeader(destination, header, headerValues);
+        }
         await destination.WriteAsync(outputPath, cancellationToken);
+    }
+
+    private static ClassHeaderValues? GetHeaderValues(
+        GenerateClassDocumentsRequest request,
+        ClassDocumentPlan classPlan)
+    {
+        if (request.OutputOptions is null)
+        {
+            return null;
+        }
+
+        if (!ReferenceEquals(request.OutputOptions.Prepared, request.Prepared)
+            || !request.OutputOptions.Headers.TryGetValue(
+                classPlan.Roster.ClassIdentifier, out var values))
+        {
+            throw new DocumentStructureException(
+                "Las cabeceras no corresponden con el lote que se está generando.");
+        }
+
+        return values;
+    }
+
+    private static void WriteDocumentHeader(
+        DocxPackage package,
+        string tableHeader,
+        ClassHeaderValues values)
+    {
+        var document = DocxXml.Parse(package.Parts[DocxNames.DocumentPart]);
+        var fields = DocxTemplateHeaderFields.LocateStrict(document, tableHeader);
+        DocxTemplateHeaderFields.WriteValue(fields.ClassTitle, values.DisplayTitle);
+        DocxTemplateHeaderFields.WriteValue(fields.TutorName, values.TutorName);
+        package.Parts[DocxNames.DocumentPart] = DocxXml.Serialize(document);
     }
 
     private static IReadOnlyList<XElement> BuildRows(
@@ -188,18 +224,6 @@ public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
         var row = new XElement(prototype);
         var nameCell = DocxXml.RowCells(row)[nameColumnIndex];
         ReplaceVisibleText(nameCell, name);
-        var properties = nameCell.Element(DocxNames.Word + "tcPr");
-        if (properties is null)
-        {
-            properties = new XElement(DocxNames.Word + "tcPr");
-            nameCell.AddFirst(properties);
-        }
-
-        properties.Add(new XElement(
-            DocxNames.Word + "shd",
-            new XAttribute(DocxNames.Value, "clear"),
-            new XAttribute(DocxNames.Word + "color", "auto"),
-            new XAttribute(DocxNames.Word + "fill", UnresolvedFillColor)));
         return row;
     }
 

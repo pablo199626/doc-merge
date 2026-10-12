@@ -21,5 +21,8 @@
 | transferencia | `Transfer` |
 | generación de clases | `ClassGeneration` |
 | plantilla | `GenerationTemplateSnapshot` |
+| plantilla incluida | `BundledGenerationTemplate` |
+| cabecera visible del documento | `ClassHeaderValues` |
+| opciones editables de salida | `ClassGenerationOutputOptions` |
 | lote preparado o revisión | `PreparedClassGeneration` |
 | carpeta nueva de salida | `OutputDirectory` |
