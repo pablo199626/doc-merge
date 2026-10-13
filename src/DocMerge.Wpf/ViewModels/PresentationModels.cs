@@ -85,7 +85,10 @@ public sealed class GenerationResultViewModel
     public int DocumentCount => Result.Documents.Count;
 
     /// <summary>Gets the number of students included in the confirmed plan.</summary>
-    public int StudentCount => Result.Plan.Classes.Sum(item => item.Rows.Count);
+    public int StudentCount => Result.Plan.IncludedStudentCount;
+
+    /// <summary>Gets the number of students omitted because of conflicts.</summary>
+    public int OmittedStudentCount => Result.Plan.OmittedStudentCount;
 
     /// <summary>Gets the number of structured issues in the confirmed plan.</summary>
     public int IssueCount => Result.Plan.Issues.Count;
@@ -95,7 +98,8 @@ public sealed class GenerationResultViewModel
 
     /// <summary>Gets a readable success summary.</summary>
     public string Summary => $"Se han creado {CountText(DocumentCount, "documento", "documentos")} "
-        + $"para {CountText(StudentCount, "alumno", "alumnos")}.";
+        + $"para {CountText(StudentCount, "alumno", "alumnos")}. "
+        + $"Se han omitido {CountText(OmittedStudentCount, "alumno en conflicto", "alumnos en conflicto")}.";
 
     /// <summary>Gets a compact read-only summary of executed header values.</summary>
     public string HeaderSummary => string.Join(

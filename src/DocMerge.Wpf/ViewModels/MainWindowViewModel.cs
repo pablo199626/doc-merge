@@ -20,13 +20,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private const double SidebarOverlayThreshold = 900;
     private const double CompactReviewThreshold = 1160;
     private const string AllStatusesFilter = "Todos los estados";
-    private const string RecoveredFilter = "Recuperados";
-    private const string UniqueMatchFilter = "Recuperado";
-    private const string EquivalentMatchesFilter = "Recuperado · históricos equivalentes";
-    private const string MissingFilter = "Sin histórico";
-    private const string UnresolvedFilter = "Conflictos";
-    private const string ConflictingDataFilter = "Conflicto histórico";
-    private const string AmbiguousIdentityFilter = "Identidad ambigua";
+    private const string FoundFilter = "Encontrado";
+    private const string NewStudentFilter = "Alumno nuevo";
+    private const string ConflictFilter = "Conflicto";
     private readonly ClassGenerationService _preparationService;
     private readonly ClassGenerationExecutionService _executionService;
     private readonly IFileDialogService _dialogs;
@@ -161,13 +157,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public IReadOnlyList<string> StatusFilters { get; } =
     [
         AllStatusesFilter,
-        RecoveredFilter,
-        UniqueMatchFilter,
-        EquivalentMatchesFilter,
-        MissingFilter,
-        UnresolvedFilter,
-        ConflictingDataFilter,
-        AmbiguousIdentityFilter,
+        FoundFilter,
+        NewStudentFilter,
+        ConflictFilter,
     ];
 
     /// <summary>Gets the command that opens an input selector.</summary>
@@ -493,8 +485,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public string VisibleStudentSummary => SelectedClass is null
         ? "Sin clase seleccionada"
         : HasActiveReviewFilters
-            ? $"{VisibleStudents.Count} de {SelectedClass.StudentCount} alumnos coinciden"
-            : CountText(SelectedClass.StudentCount, "alumno en esta clase", "alumnos en esta clase");
+            ? $"{VisibleStudents.Count} de {SelectedClass.StudentCount} alumnos coinciden · {SelectedClass.OutputSummary}"
+            : SelectedClass.OutputSummary;
 
     /// <summary>Gets whether the active filters contain at least one student.</summary>
     public bool HasVisibleStudents => VisibleStudents.Count > 0;
@@ -515,12 +507,24 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the complete batch summary.</summary>
     public string BatchSummary => _prepared is null
         ? string.Empty
-        : $"{CountText(_prepared.Plan.Classes.Count, "documento", "documentos")} · "
-            + $"{CountText(_prepared.Plan.Classes.Sum(item => item.Rows.Count), "alumno", "alumnos")} · "
-            + CountText(_prepared.Plan.Issues.Count, "incidencia", "incidencias");
+        : $"{CountText(_prepared.Plan.RosterStudentCount, "alumno en el listado", "alumnos en el listado")} · "
+            + $"{_prepared.Plan.IncludedStudentCount} "
+            + $"{(_prepared.Plan.IncludedStudentCount == 1 ? "se incluirá" : "se incluirán")} · "
+            + $"{_prepared.Plan.OmittedStudentCount} "
+            + $"{(_prepared.Plan.OmittedStudentCount == 1 ? "omitido" : "omitidos")} por conflicto · "
+            + CountText(_prepared.Plan.OutputClasses.Count, "documento previsto", "documentos previstos");
 
     /// <summary>Gets whether blocking issues prevent final generation.</summary>
     public bool HasBlockingIssues => _prepared?.Plan.HasBlockingIssues == true;
+
+    /// <summary>Gets guidance about whether the reviewed batch can continue.</summary>
+    public string ReviewReadinessMessage => _prepared switch
+    {
+        null => string.Empty,
+        { Plan.HasBlockingIssues: true } => "Corrige los bloqueos y vuelve a analizar antes de generar.",
+        { Plan.OutputClasses.Count: 0 } => "No hay alumnos sin conflicto para generar documentos.",
+        _ => "En el siguiente paso elegirás la carpeta de salida.",
+    };
 
     /// <summary>Gets whether the selected template supports title and tutor fields.</summary>
     public bool IsHeaderCustomizationAvailable => _prepared?.Template.SupportsDocumentHeader == true;
@@ -647,7 +651,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets whether review can advance to final generation.</summary>
     public bool CanContinueToGeneration => WorkflowState == DesktopWorkflowState.Reviewing
         && _prepared is not null
-        && !HasBlockingIssues;
+        && !HasBlockingIssues
+        && _prepared.Plan.OutputClasses.Count > 0;
 
     /// <summary>Gets an identity that changes whenever a new desktop session starts.</summary>
     public int SessionSequence => _sessionSequence;
@@ -1190,6 +1195,11 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
                 row,
                 classIssues.Where(issue => AffectsStudent(issue.Issue, row)).ToArray())).ToArray();
             Classes.Add(new ClassReviewViewModel(classPlan, students, classIssues));
+            if (!classPlan.ProducesDocument)
+            {
+                continue;
+            }
+
             var header = new ClassHeaderViewModel(
                 classPlan.Roster.ClassIdentifier,
                 prepared.Template.SupportsDocumentHeader);
@@ -1200,6 +1210,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         SelectedClass = Classes.FirstOrDefault();
         OnPropertyChanged(nameof(BatchSummary));
         OnPropertyChanged(nameof(HasBlockingIssues));
+        OnPropertyChanged(nameof(ReviewReadinessMessage));
         OnPropertyChanged(nameof(CanContinueToGeneration));
         OnPropertyChanged(nameof(IsHeaderCustomizationAvailable));
         OnPropertyChanged(nameof(HeaderCustomizationMessage));
@@ -1236,15 +1247,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private bool MatchesStatus(StudentReviewViewModel student) => SelectedFilter switch
     {
         AllStatusesFilter => true,
-        RecoveredFilter => student.ResolutionType is HistoricalResolutionType.UniqueMatch
-            or HistoricalResolutionType.EquivalentMatches,
-        UniqueMatchFilter => student.ResolutionType == HistoricalResolutionType.UniqueMatch,
-        EquivalentMatchesFilter => student.ResolutionType == HistoricalResolutionType.EquivalentMatches,
-        MissingFilter => student.ResolutionType == HistoricalResolutionType.MissingHistoricalStudent,
-        UnresolvedFilter => student.ResolutionType is HistoricalResolutionType.ConflictingHistoricalData
-            or HistoricalResolutionType.AmbiguousStudentIdentity,
-        ConflictingDataFilter => student.ResolutionType == HistoricalResolutionType.ConflictingHistoricalData,
-        AmbiguousIdentityFilter => student.ResolutionType == HistoricalResolutionType.AmbiguousStudentIdentity,
+        FoundFilter => student.ResolutionType == HistoricalResolutionType.Found,
+        NewStudentFilter => student.ResolutionType == HistoricalResolutionType.NewStudent,
+        ConflictFilter => student.ResolutionType == HistoricalResolutionType.Conflict,
         _ => false,
     };
 
@@ -1252,19 +1257,15 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     {
         var title = issue.Code switch
         {
-            "MissingHistoricalStudent" => "Sin histórico",
-            "EquivalentHistoricalRecords" => "Históricos equivalentes",
-            "ConflictingHistoricalData" => "Conflicto histórico",
-            "AmbiguousStudentIdentity" => "Identidad ambigua",
-            "PdfWithoutDeclaredTotal" => "PDF sin total declarado",
+            "DuplicateStudentName" => "Nombre y apellidos duplicados",
             "DuplicateClass" => "Clase duplicada",
             "DuplicateStudentNumber" => "NIA repetido",
             _ => issue.Code,
         };
         var consequence = issue.Code switch
         {
-            "MissingHistoricalStudent" or "ConflictingHistoricalData" or "AmbiguousStudentIdentity" =>
-                "Se generará el nombre del PDF; las demás columnas quedarán vacías.",
+            "DuplicateStudentName" =>
+                "El alumno se omitirá de los documentos generados hasta resolver el conflicto.",
             "DuplicateClass" or "DuplicateStudentNumber" =>
                 "Impide generar hasta corregir los documentos de entrada y analizar de nuevo.",
             _ => "Permite generar; revise las fuentes indicadas.",
@@ -1377,6 +1378,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         OutputFolderName = "Clases generadas";
         OnPropertyChanged(nameof(BatchSummary));
         OnPropertyChanged(nameof(HasBlockingIssues));
+        OnPropertyChanged(nameof(ReviewReadinessMessage));
         OnPropertyChanged(nameof(CanContinueToGeneration));
         OnPropertyChanged(nameof(IsHeaderCustomizationAvailable));
         OnPropertyChanged(nameof(HeaderCustomizationMessage));

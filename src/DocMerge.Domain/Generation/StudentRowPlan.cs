@@ -5,4 +5,8 @@ namespace DocMerge.Domain.Generation;
 /// <param name="Resolution">The historical information resolution.</param>
 public sealed record StudentRowPlan(
     ClassRosterEntry RosterEntry,
-    HistoricalResolution Resolution);
+    HistoricalResolution Resolution)
+{
+    /// <summary>Gets whether this assignment must be written to the generated document.</summary>
+    public bool IsIncluded => Resolution.ResolutionType != HistoricalResolutionType.Conflict;
+}

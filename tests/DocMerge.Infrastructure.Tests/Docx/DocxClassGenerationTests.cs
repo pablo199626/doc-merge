@@ -50,6 +50,80 @@ public sealed class DocxClassGenerationTests
     }
 
     [Fact]
+    public async Task GenerateAndValidateAsync_ConflictedStudent_OmitsRowFromDocument()
+    {
+        using var temporary = new TemporaryDirectory();
+        var templatePath = temporary.File("template.docx");
+        var historicalPath = temporary.File("historical.docx");
+        DocxTestPackage.Create(
+            templatePath,
+            [DocxTestPackage.Header + DocxTestPackage.EmptyRow],
+            marker: "TEMPLATE");
+        DocxTestPackage.Create(
+            historicalPath,
+            [DocxTestPackage.Header
+                + DocxTestPackage.PersonRow("Alumno Uno", "PRIMERA")
+                + DocxTestPackage.PersonRow("Alumno Uno", "SEGUNDA")],
+            marker: "HISTORICAL",
+            source: true);
+        var prepared = await PrepareAsync(templatePath, historicalPath);
+        var profile = SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier);
+
+        var generated = await new DocxClassDocumentGenerator().GenerateAsync(
+            new GenerateClassDocumentsRequest(prepared, temporary.File("working"), profile),
+            CancellationToken.None);
+        await new DocxClassGenerationValidator(new DocxDocumentReader()).ValidateAsync(
+            new ValidateClassDocumentsRequest(prepared, generated, profile),
+            CancellationToken.None);
+        var result = await new DocxDocumentReader().ReadAsync(
+            Assert.Single(generated).Path, "Nombre y Apellidos", CancellationToken.None);
+
+        Assert.Equal("ALUMNO, DOS", Assert.Single(result.Records).OriginalName);
+        Assert.Equal(1, prepared.Plan.OmittedStudentCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AllStudentsConflicted_RejectsBatchWithoutPublishing()
+    {
+        using var temporary = new TemporaryDirectory();
+        var templatePath = temporary.File("template.docx");
+        var historicalPath = temporary.File("historical.docx");
+        var outputPath = temporary.File("published");
+        DocxTestPackage.Create(
+            templatePath,
+            [DocxTestPackage.Header + DocxTestPackage.EmptyRow],
+            marker: "TEMPLATE");
+        DocxTestPackage.Create(
+            historicalPath,
+            [DocxTestPackage.Header
+                + DocxTestPackage.PersonRow("Alumno Uno", "PRIMERA")
+                + DocxTestPackage.PersonRow("Alumno Uno", "SEGUNDA")],
+            marker: "HISTORICAL",
+            source: true);
+        var prepared = await PrepareAsync(
+            templatePath,
+            historicalPath,
+            rosterEntries: [Entry("11111111", "ALUMNO, UNO", 1)]);
+        var service = new ClassGenerationExecutionService(
+            new DocxClassDocumentGenerator(),
+            new DocxClassGenerationValidator(new DocxDocumentReader()),
+            new GenerationBatchPublisher(),
+            new PhysicalFileStore(),
+            new StaticInputDiscovery(prepared.Inputs));
+
+        var error = await Assert.ThrowsAsync<DocMerge.Application.Validation.OperationValidationException>(() =>
+            service.ExecuteAsync(
+                new ClassGenerationExecutionRequest(
+                    prepared,
+                    outputPath,
+                    SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier)),
+                CancellationToken.None));
+
+        Assert.Contains("No hay alumnos", error.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ValidBatch_PublishesNewDirectoryAtomically()
     {
         using var temporary = new TemporaryDirectory();
@@ -91,17 +165,18 @@ public sealed class DocxClassGenerationTests
     private static async Task<PreparedClassGeneration> PrepareAsync(
         string templatePath,
         string historicalPath,
-        bool includeSecondClass = false)
+        bool includeSecondClass = false,
+        IReadOnlyList<ClassRosterEntry>? rosterEntries = null)
     {
         var template = await new DocxTemplateReader().ReadAsync(
             templatePath, "Nombre y Apellidos", CancellationToken.None);
         var historical = await new DocxHistoricalStudentReader().ReadAsync(
             historicalPath, "Nombre y Apellidos", CancellationToken.None);
-        var entries = new[]
-        {
+        var entries = rosterEntries ??
+        [
             Entry("11111111", "ALUMNO, UNO", 1),
             Entry("22222222", "ALUMNO, DOS", 2),
-        };
+        ];
         var roster = new ClassRoster(
             templatePath,
             template.Sha256,

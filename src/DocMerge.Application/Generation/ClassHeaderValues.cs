@@ -19,7 +19,7 @@ public sealed class ClassGenerationOutputOptions
         ArgumentNullException.ThrowIfNull(prepared);
         ArgumentNullException.ThrowIfNull(headers);
         Prepared = prepared;
-        var expected = prepared.Plan.Classes.Select(item => item.Roster.ClassIdentifier).ToHashSet();
+        var expected = prepared.Plan.OutputClasses.Select(item => item.Roster.ClassIdentifier).ToHashSet();
         if (headers.Count != expected.Count || headers.Keys.Any(identifier => !expected.Contains(identifier)))
         {
             throw new OperationValidationException(

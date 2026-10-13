@@ -35,15 +35,16 @@ public sealed class DocxClassGenerationValidator : IClassGenerationValidator
         var generated = request.GeneratedDocuments.ToDictionary(
             item => item.ClassIdentifier,
             item => item.Path);
-        if (generated.Count != request.Prepared.Plan.Classes.Count)
+        var outputClasses = request.Prepared.Plan.OutputClasses;
+        if (generated.Count != outputClasses.Count)
         {
             throw new TransferValidationException(
-                "El lote generado no contiene exactamente un documento por clase.");
+                "El lote generado no contiene exactamente un documento por clase con alumnado incluido.");
         }
 
         var templateParts = await ReadPartsAsync(
             request.Prepared.Template.DocumentPath, cancellationToken);
-        foreach (var classPlan in request.Prepared.Plan.Classes)
+        foreach (var classPlan in outputClasses)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!generated.TryGetValue(classPlan.Roster.ClassIdentifier, out var path))
@@ -66,7 +67,7 @@ public sealed class DocxClassGenerationValidator : IClassGenerationValidator
     {
         var snapshot = await _reader.ReadAsync(
             path, request.Prepared.Request.Header, cancellationToken);
-        var expected = classPlan.Rows.OrderBy(
+        var expected = classPlan.IncludedRows.OrderBy(
             row => request.SortingProfile.CreateKey(row.RosterEntry.OriginalName),
             SortKeyComparer.Instance).ToArray();
         if (snapshot.Records.Count != expected.Length)
@@ -110,7 +111,7 @@ public sealed class DocxClassGenerationValidator : IClassGenerationValidator
         var actualRow = XElement.Parse(actual.RowXml, LoadOptions.PreserveWhitespace);
         if (expected.Resolution.SelectedCandidate is null)
         {
-            ValidateUnresolvedRow(actualRow, nameColumnIndex, actual.OriginalName);
+            ValidateNewStudentRow(actualRow, nameColumnIndex, actual.OriginalName);
             return;
         }
 
@@ -134,7 +135,7 @@ public sealed class DocxClassGenerationValidator : IClassGenerationValidator
             .ToArray();
     }
 
-    private static void ValidateUnresolvedRow(
+    private static void ValidateNewStudentRow(
         XElement row,
         int nameColumnIndex,
         string studentName)
@@ -146,7 +147,7 @@ public sealed class DocxClassGenerationValidator : IClassGenerationValidator
         if (information.Any(text => text.Length > 0))
         {
             throw new TransferValidationException(
-                $"El alumno sin resolución {studentName} contiene información inventada.");
+                $"El alumno nuevo {studentName} contiene información inventada.");
         }
 
     }

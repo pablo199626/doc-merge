@@ -32,8 +32,27 @@ public sealed class MainWindowViewModelTests
 
         Assert.True(viewModel.IsReviewStep);
         Assert.Single(viewModel.Classes);
-        Assert.Equal("Sin histórico", viewModel.VisibleStudents[0].Status);
+        Assert.Equal("Alumno nuevo", viewModel.VisibleStudents[0].Status);
         Assert.Equal("12345678", viewModel.VisibleStudents[0].StudentNumber);
+        Assert.Equal(
+            ["Todos los estados", "Encontrado", "Alumno nuevo", "Conflicto"],
+            viewModel.StatusFilters);
+    }
+
+    [Fact]
+    public async Task AnalyzeCommand_AllStudentsConflicted_DisablesConfigurationAndExplainsEmptyOutput()
+    {
+        using var fixture = new ViewModelFixture { AllStudentsConflict = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+
+        Assert.Equal(DesktopWorkflowState.Reviewing, viewModel.WorkflowState);
+        Assert.Equal("Conflicto", Assert.Single(viewModel.VisibleStudents).Status);
+        Assert.False(viewModel.CanContinueToGeneration);
+        Assert.Empty(viewModel.ClassHeaders);
+        Assert.Equal("No hay alumnos sin conflicto para generar documentos.", viewModel.ReviewReadinessMessage);
     }
 
     [Fact]
@@ -103,7 +122,7 @@ public sealed class MainWindowViewModelTests
         var rosterPath = viewModel.RosterInput.Path;
         var templatePath = viewModel.TemplateInput.Path;
         viewModel.SearchText = "alumno";
-        viewModel.SelectedFilter = "Sin histórico";
+        viewModel.SelectedFilter = "Alumno nuevo";
         viewModel.ContinueToGenerationCommand.Execute(parameter: null);
         Assert.Single(viewModel.ClassHeaders).DisplayTitle = "Título anterior";
         viewModel.OutputFolderName = "Salida anterior";
@@ -269,7 +288,7 @@ public sealed class MainWindowViewModelTests
         await viewModel.AnalyzeCommand.ExecuteAsync();
         var summary = viewModel.BatchSummary;
 
-        viewModel.SelectedFilter = "Recuperado";
+        viewModel.SelectedFilter = "Encontrado";
 
         Assert.Empty(viewModel.VisibleStudents);
         Assert.Equal(summary, viewModel.BatchSummary);
@@ -322,18 +341,17 @@ public sealed class MainWindowViewModelTests
         await viewModel.AnalyzeCommand.ExecuteAsync();
         var selectedClass = Assert.IsType<ClassReviewViewModel>(viewModel.SelectedClass);
 
-        viewModel.FilterByStatusCommand.Execute("Conflictos");
+        viewModel.FilterByStatusCommand.Execute("Conflicto");
 
-        Assert.Equal(3, viewModel.VisibleStudents.Count);
+        Assert.Equal(4, viewModel.VisibleStudents.Count);
         Assert.Equal(7, selectedClass.StudentCount);
-        Assert.Equal(3, selectedClass.RecoveredCount);
-        Assert.Equal(1, selectedClass.MissingCount);
-        Assert.Equal(3, selectedClass.UnresolvedCount);
-        Assert.Equal(1, selectedClass.DocumentWarningCount);
-        Assert.Equal(1, selectedClass.OtherWarningCount);
+        Assert.Equal(2, selectedClass.FoundCount);
+        Assert.Equal(1, selectedClass.NewStudentCount);
+        Assert.Equal(4, selectedClass.ConflictCount);
+        Assert.Equal(3, selectedClass.IncludedCount);
         Assert.True(viewModel.HasActiveReviewFilters);
 
-        viewModel.FilterByStatusCommand.Execute("Conflictos");
+        viewModel.FilterByStatusCommand.Execute("Conflicto");
 
         Assert.Equal(7, viewModel.VisibleStudents.Count);
         Assert.False(viewModel.HasActiveReviewFilters);
@@ -348,7 +366,7 @@ public sealed class MainWindowViewModelTests
         await viewModel.AnalyzeCommand.ExecuteAsync();
 
         viewModel.SearchText = "AUSENTE";
-        viewModel.SelectedFilter = "Sin histórico";
+        viewModel.SelectedFilter = "Alumno nuevo";
         viewModel.ClearReviewFiltersCommand.Execute(parameter: null);
 
         Assert.Equal(string.Empty, viewModel.SearchText);
@@ -469,6 +487,7 @@ public sealed class MainWindowViewModelTests
         internal bool UseMixedReview { get; init; }
 
         internal bool TemplateSupportsHeader { get; init; }
+        internal bool AllStudentsConflict { get; init; }
         internal bool BlockRosterRead { get; set; }
         internal bool BlockPublishing { get; init; }
         internal bool BlockBundledTemplate { get; init; }
@@ -501,7 +520,7 @@ public sealed class MainWindowViewModelTests
                 discovery,
                 new StubRosterReader(this, RosterPath, FailRosterRead, UseMixedReview),
                 new StubTemplateReader(TemplatePath, TemplateSupportsHeader),
-                new StubHistoricalReader(HistoricalPath, UseMixedReview),
+                new StubHistoricalReader(HistoricalPath, UseMixedReview, AllStudentsConflict),
                 new ClassGenerationPlanner(new HistoricalStudentResolver()));
             var execution = new ClassGenerationExecutionService(
                 new StubGenerator(),
@@ -605,7 +624,10 @@ public sealed class MainWindowViewModelTests
                     supportsHeader ? 1 : null));
         }
 
-        private sealed class StubHistoricalReader(string path, bool useMixedReview) : IHistoricalStudentReader
+        private sealed class StubHistoricalReader(
+            string path,
+            bool useMixedReview,
+            bool allStudentsConflict) : IHistoricalStudentReader
         {
             public Task<HistoricalDocumentSnapshot> ReadAsync(
                 string ignored,
@@ -614,20 +636,22 @@ public sealed class MainWindowViewModelTests
                     path,
                     "historical-hash",
                     ["NIA", header, "Información"],
-                    useMixedReview ? MixedCandidates(path) : []));
+                    allStudentsConflict
+                        ? [Candidate(path, "ALUMNO, UNO"), Candidate(path + ".copy", "ALUMNO, UNO")]
+                        : useMixedReview ? MixedCandidates(path) : []));
 
             private static HistoricalStudentCandidate[] MixedCandidates(string path) =>
             [
-                Candidate(path, "ÚNICO, ALUMNO", "unique"),
-                Candidate(path, "EQUIVALENTE, ALUMNO", "equivalent"),
-                Candidate(path + ".copy", "EQUIVALENTE, ALUMNO", "equivalent"),
-                Candidate(path, "CONFLICTO, ALUMNO", "first"),
-                Candidate(path + ".copy", "CONFLICTO, ALUMNO", "second"),
-                Candidate(path, "AMBIGUO, ALUMNO", "ambiguous"),
-                Candidate(path, "OTRO, ÚNICO", "other"),
+                Candidate(path, "ÚNICO, ALUMNO"),
+                Candidate(path, "EQUIVALENTE, ALUMNO"),
+                Candidate(path + ".copy", "EQUIVALENTE, ALUMNO"),
+                Candidate(path, "CONFLICTO, ALUMNO"),
+                Candidate(path + ".copy", "CONFLICTO, ALUMNO"),
+                Candidate(path, "AMBIGUO, ALUMNO"),
+                Candidate(path, "OTRO, ÚNICO"),
             ];
 
-            private static HistoricalStudentCandidate Candidate(string documentPath, string name, string signature)
+            private static HistoricalStudentCandidate Candidate(string documentPath, string name)
             {
                 var matchKey = StudentNameMatchKey.Create(name);
                 var record = new DocumentRecord(
@@ -638,7 +662,7 @@ public sealed class MainWindowViewModelTests
                     name,
                     "<row />",
                     new RecordDependencies([], [], []));
-                return new HistoricalStudentCandidate(record, matchKey, signature);
+                return new HistoricalStudentCandidate(record, matchKey);
             }
         }
 

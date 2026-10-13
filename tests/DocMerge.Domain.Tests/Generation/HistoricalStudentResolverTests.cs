@@ -6,62 +6,61 @@ namespace DocMerge.Domain.Tests.Generation;
 public sealed class HistoricalStudentResolverTests
 {
     [Fact]
-    public void Resolve_NoCandidate_ReturnsMissingResolution()
+    public void Resolve_NoCandidate_ReturnsNewStudent()
     {
         var resolver = new HistoricalStudentResolver();
         var index = new HistoricalStudentIndex([]);
 
         var result = resolver.Resolve("alumno uno", index);
 
-        Assert.Equal(HistoricalResolutionType.MissingHistoricalStudent, result.ResolutionType);
+        Assert.Equal(HistoricalResolutionType.NewStudent, result.ResolutionType);
         Assert.Null(result.SelectedCandidate);
     }
 
     [Fact]
-    public void Resolve_OneCandidate_ReturnsUniqueMatch()
+    public void Resolve_OneCandidate_ReturnsFound()
     {
-        var candidate = Candidate("one.docx", "alumno uno", "A");
+        var candidate = Candidate("one.docx", "alumno uno");
         var resolver = new HistoricalStudentResolver();
         var index = new HistoricalStudentIndex([candidate]);
 
         var result = resolver.Resolve("alumno uno", index);
 
-        Assert.Equal(HistoricalResolutionType.UniqueMatch, result.ResolutionType);
+        Assert.Equal(HistoricalResolutionType.Found, result.ResolutionType);
         Assert.Same(candidate, result.SelectedCandidate);
     }
 
     [Fact]
-    public void Resolve_EquivalentCandidates_ReturnsFirstDeterministicCandidate()
+    public void Resolve_EquivalentCandidates_ReturnsConflictWithoutSelection()
     {
-        var first = Candidate("first.docx", "alumno uno", "SAME");
-        var second = Candidate("second.docx", "alumno uno", "SAME");
+        var first = Candidate("first.docx", "alumno uno");
+        var second = Candidate("second.docx", "alumno uno");
         var resolver = new HistoricalStudentResolver();
         var index = new HistoricalStudentIndex([first, second]);
 
         var result = resolver.Resolve("alumno uno", index);
 
-        Assert.Equal(HistoricalResolutionType.EquivalentMatches, result.ResolutionType);
-        Assert.Same(first, result.SelectedCandidate);
+        Assert.Equal(HistoricalResolutionType.Conflict, result.ResolutionType);
+        Assert.Null(result.SelectedCandidate);
         Assert.Equal(2, result.Candidates.Count);
     }
 
     [Fact]
-    public void Resolve_DifferentCandidates_ReturnsBlockingConflictWithoutSelection()
+    public void Resolve_DifferentCandidates_ReturnsConflictWithoutSelection()
     {
         var resolver = new HistoricalStudentResolver();
         var index = new HistoricalStudentIndex(
-            [Candidate("first.docx", "alumno uno", "A"), Candidate("second.docx", "alumno uno", "B")]);
+            [Candidate("first.docx", "alumno uno"), Candidate("second.docx", "alumno uno")]);
 
         var result = resolver.Resolve("alumno uno", index);
 
-        Assert.Equal(HistoricalResolutionType.ConflictingHistoricalData, result.ResolutionType);
+        Assert.Equal(HistoricalResolutionType.Conflict, result.ResolutionType);
         Assert.Null(result.SelectedCandidate);
     }
 
     private static HistoricalStudentCandidate Candidate(
         string path,
-        string matchKey,
-        string signature)
+        string matchKey)
     {
         var record = new DocumentRecord(
             path,
@@ -71,6 +70,6 @@ public sealed class HistoricalStudentResolverTests
             matchKey,
             "<row />",
             new RecordDependencies([], [], []));
-        return new HistoricalStudentCandidate(record, matchKey, signature);
+        return new HistoricalStudentCandidate(record, matchKey);
     }
 }

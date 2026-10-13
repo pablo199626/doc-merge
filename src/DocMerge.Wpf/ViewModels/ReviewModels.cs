@@ -64,18 +64,6 @@ public sealed record ClassReviewViewModel(
     /// <summary>Gets an accessible summary of all assignments in the class.</summary>
     public string StudentSummary => CountText(StudentCount, "alumno", "alumnos");
 
-    /// <summary>Gets the number of document-level warnings related to the class.</summary>
-    public int DocumentWarningCount => Issues.Count(issue =>
-        !issue.IsBlocking && issue.Issue.Code == "PdfWithoutDeclaredTotal");
-
-    /// <summary>Gets the number of other non-blocking issues related to the class.</summary>
-    public int OtherWarningCount => Issues.Count(issue =>
-        !issue.IsBlocking && issue.Issue.Code is not
-            "MissingHistoricalStudent" and not
-            "ConflictingHistoricalData" and not
-            "AmbiguousStudentIdentity" and not
-            "PdfWithoutDeclaredTotal");
-
     /// <summary>Gets the number of blocking issues related to the class.</summary>
     public int BlockingCount => Issues.Count(issue => issue.IsBlocking);
 
@@ -85,76 +73,51 @@ public sealed record ClassReviewViewModel(
     /// <summary>Gets whether the class has any issue in the batch report.</summary>
     public bool HasIssues => Issues.Count > 0;
 
-    /// <summary>Gets whether the class has a document-level warning.</summary>
-    public bool HasDocumentWarnings => DocumentWarningCount > 0;
+    /// <summary>Gets students with exactly one historical match.</summary>
+    public int FoundCount => Students.Count(student =>
+        student.ResolutionType == HistoricalResolutionType.Found);
 
-    /// <summary>Gets whether the class has another non-blocking warning.</summary>
-    public bool HasOtherWarnings => OtherWarningCount > 0;
+    /// <summary>Gets whether the class has found students.</summary>
+    public bool HasFoundStudents => FoundCount > 0;
 
-    /// <summary>Gets students whose historical information can be copied safely.</summary>
-    public int RecoveredCount => CountDistinctStudents(student =>
-        student.ResolutionType is HistoricalResolutionType.UniqueMatch
-            or HistoricalResolutionType.EquivalentMatches);
+    /// <summary>Gets students with no historical match.</summary>
+    public int NewStudentCount => Students.Count(student =>
+        student.ResolutionType == HistoricalResolutionType.NewStudent);
 
-    /// <summary>Gets whether the class has safely recovered students.</summary>
-    public bool HasRecoveredStudents => RecoveredCount > 0;
+    /// <summary>Gets whether the class has new students.</summary>
+    public bool HasNewStudents => NewStudentCount > 0;
 
-    /// <summary>Gets students without a historical candidate.</summary>
-    public int MissingCount => CountDistinctStudents(student =>
-        student.ResolutionType == HistoricalResolutionType.MissingHistoricalStudent);
+    /// <summary>Gets students omitted because their name cannot be resolved uniquely.</summary>
+    public int ConflictCount => Students.Count(student =>
+        student.ResolutionType == HistoricalResolutionType.Conflict);
 
-    /// <summary>Gets whether the class has students without historical information.</summary>
-    public bool HasMissingStudents => MissingCount > 0;
+    /// <summary>Gets whether the class has conflicted students.</summary>
+    public bool HasConflicts => ConflictCount > 0;
 
-    /// <summary>Gets students whose historical information cannot be copied safely.</summary>
-    public int UnresolvedCount => CountDistinctStudents(student => student.ResolutionType is
-        HistoricalResolutionType.ConflictingHistoricalData
-        or HistoricalResolutionType.AmbiguousStudentIdentity);
+    /// <summary>Gets students that will be included in the generated document.</summary>
+    public int IncludedCount => StudentCount - ConflictCount;
 
-    /// <summary>Gets whether the class has students whose identity or history is unresolved.</summary>
-    public bool HasUnresolvedStudents => UnresolvedCount > 0;
+    /// <summary>Gets the complete output summary for this class.</summary>
+    public string OutputSummary => $"{CountText(StudentCount, "alumno en el listado", "alumnos en el listado")} · "
+        + $"{IncludedCount} {(IncludedCount == 1 ? "se incluirá" : "se incluirán")} · "
+        + $"{ConflictCount} {(ConflictCount == 1 ? "omitido" : "omitidos")} por conflicto";
 
-    /// <summary>Gets an accessible summary of students without historical information.</summary>
-    public string MissingSummary => CountText(MissingCount, "alumno sin histórico", "alumnos sin histórico");
+    /// <summary>Gets an accessible summary of found students.</summary>
+    public string FoundSummary => CountText(FoundCount, "alumno encontrado", "alumnos encontrados");
 
-    /// <summary>Gets an accessible summary of safely recovered students.</summary>
-    public string RecoveredSummary => CountText(RecoveredCount, "alumno recuperado", "alumnos recuperados");
+    /// <summary>Gets an accessible summary of new students.</summary>
+    public string NewStudentSummary => CountText(NewStudentCount, "alumno nuevo", "alumnos nuevos");
 
-    /// <summary>Gets an accessible summary of unresolved students.</summary>
-    public string UnresolvedSummary => CountText(UnresolvedCount, "conflicto", "conflictos");
-
-    /// <summary>Gets an accessible summary of document-level warnings.</summary>
-    public string DocumentWarningSummary => CountText(DocumentWarningCount, "aviso documental", "avisos documentales");
-
-    /// <summary>Gets an accessible summary of other warnings.</summary>
-    public string OtherWarningSummary => CountText(OtherWarningCount, "otro aviso", "otros avisos");
+    /// <summary>Gets an accessible summary of conflicted students.</summary>
+    public string ConflictSummary => CountText(ConflictCount, "alumno en conflicto", "alumnos en conflicto");
 
     /// <summary>Gets an accessible summary of blocking issues.</summary>
     public string BlockingSummary => CountText(BlockingCount, "bloqueo", "bloqueos");
 
-    /// <summary>Gets issues associated with missing historical students.</summary>
-    public ClassIssueGroupViewModel MissingIssues => CreateIssueGroup(
-        $"Alumnos sin histórico de {Code}",
-        issue => issue.Issue.Code == "MissingHistoricalStudent");
-
-    /// <summary>Gets issues associated with conflicting or ambiguous students.</summary>
-    public ClassIssueGroupViewModel UnresolvedIssues => CreateIssueGroup(
+    /// <summary>Gets issues associated with duplicated student names.</summary>
+    public ClassIssueGroupViewModel ConflictIssues => CreateIssueGroup(
         $"Conflictos de {Code}",
-        issue => issue.Issue.Code is "ConflictingHistoricalData" or "AmbiguousStudentIdentity");
-
-    /// <summary>Gets document-level warnings.</summary>
-    public ClassIssueGroupViewModel DocumentIssues => CreateIssueGroup(
-        $"Avisos documentales de {Code}",
-        issue => issue.Issue.Code == "PdfWithoutDeclaredTotal");
-
-    /// <summary>Gets other non-blocking warnings.</summary>
-    public ClassIssueGroupViewModel OtherIssues => CreateIssueGroup(
-        $"Otros avisos de {Code}",
-        issue => !issue.IsBlocking && issue.Issue.Code is not
-            "MissingHistoricalStudent" and not
-            "ConflictingHistoricalData" and not
-            "AmbiguousStudentIdentity" and not
-            "PdfWithoutDeclaredTotal");
+        issue => issue.Issue.Code == "DuplicateStudentName");
 
     /// <summary>Gets blocking issues.</summary>
     public ClassIssueGroupViewModel BlockingIssues => CreateIssueGroup(
@@ -163,12 +126,6 @@ public sealed record ClassReviewViewModel(
 
     /// <summary>Gets every issue associated with the class.</summary>
     public ClassIssueGroupViewModel AllIssues => new($"Incidencias de {Code}", Issues);
-
-    private int CountDistinctStudents(Func<StudentReviewViewModel, bool> predicate) =>
-        Students.Where(predicate)
-            .Select(student => student.StudentNumber)
-            .Distinct(StringComparer.Ordinal)
-            .Count();
 
     private static string CountText(int count, string singular, string plural) =>
         $"{count} {(count == 1 ? singular : plural)}";
@@ -229,26 +186,20 @@ internal static class StudentReviewText
 
     private static string Consequence(HistoricalResolutionType type) => type switch
     {
-        HistoricalResolutionType.UniqueMatch =>
+        HistoricalResolutionType.Found =>
             "Se copiará la información del histórico seleccionado al documento generado.",
-        HistoricalResolutionType.EquivalentMatches =>
-            "Se copiará una representación segura de los históricos equivalentes.",
-        HistoricalResolutionType.MissingHistoricalStudent =>
+        HistoricalResolutionType.NewStudent =>
             "Se escribirá el nombre del PDF; las demás columnas quedarán vacías.",
-        HistoricalResolutionType.ConflictingHistoricalData =>
-            "No se copiará información dudosa. Se escribirá el nombre del PDF y las demás columnas quedarán vacías.",
-        HistoricalResolutionType.AmbiguousStudentIdentity =>
-            "No se elegirá ningún candidato. Se escribirá el nombre del PDF y las demás columnas quedarán vacías.",
+        HistoricalResolutionType.Conflict =>
+            "El alumno se omitirá del documento generado hasta que el conflicto se resuelva manualmente.",
         _ => throw new InvalidOperationException("Resolución histórica no reconocida."),
     };
 
     internal static string Status(HistoricalResolutionType type) => type switch
     {
-        HistoricalResolutionType.UniqueMatch => "Recuperado",
-        HistoricalResolutionType.EquivalentMatches => "Recuperado · históricos equivalentes",
-        HistoricalResolutionType.MissingHistoricalStudent => "Sin histórico",
-        HistoricalResolutionType.ConflictingHistoricalData => "Conflicto histórico",
-        HistoricalResolutionType.AmbiguousStudentIdentity => "Identidad ambigua",
+        HistoricalResolutionType.Found => "Encontrado",
+        HistoricalResolutionType.NewStudent => "Alumno nuevo",
+        HistoricalResolutionType.Conflict => "Conflicto",
         _ => throw new InvalidOperationException("Resolución histórica no reconocida."),
     };
 }

@@ -36,7 +36,7 @@ salida debe ser nueva y no admite `--force`.
 1. `ClassGenerationService.PrepareAsync` descubre y lee todas las entradas sin
    requerir todavía una carpeta de salida.
 2. `PdfPigClassRosterReader` extrae clase, NIA, nombre, ordinal y localización.
-3. `DocxHistoricalStudentReader` prepara cada fila y su firma conservadora.
+3. `DocxHistoricalStudentReader` prepara cada fila y sus campos de revisión.
 4. `HistoricalStudentIndex` indexa todos los candidatos mediante `MatchKey`.
 5. `ClassGenerationPlanner` crea planes e incidencias estructuradas.
 6. `DocxClassDocumentGenerator` crea cada documento desde una copia de plantilla.
@@ -67,11 +67,10 @@ La revisión visual validada presenta tarjetas compactas para las entradas, una
 lista de clases y una tabla virtualizada con búsqueda, filtro y etiquetas de
 estado. En ancho compacto, la lista de clases se sustituye por un selector y el
 `DataGrid` conserva su scroll propio, sin ocultar las acciones de la pantalla.
-Las tarjetas y la cabecera distinguen alumnos sin histórico, conflictos o
-identidades ambiguas, avisos documentales, otros avisos y bloqueos. Los recuentos
-de alumnos se deduplican por NIA dentro de cada categoría; el informe conserva
-las incidencias originales y sus referencias. Los badges de alumnado activan
-filtros de solo lectura y nunca cambian el plan ni sus totales.
+Las tarjetas y la cabecera distinguen los estados Encontrado, Alumno nuevo y
+Conflicto, además de los bloqueos estructurales. Los recuentos usan asignaciones
+del PDF y separan alumnado del listado, incluido y omitido. Los badges de
+alumnado activan filtros de solo lectura y nunca cambian el plan ni sus totales.
 
 El shell incorpora un stepper conectado y un sidebar persistente: 64 DIP
 colapsado y 220 DIP expandido. En ventanas estrechas, la expansión se superpone
@@ -108,8 +107,9 @@ aunque exista una solicitud tardía: nunca se eliminan documentos finales para
 simular una cancelación. Cerrar la ventana durante una operación aplica la misma
 espera y los intentos de cierre repetidos no eluden la limpieza.
 
-El tercer paso permite editar, para todas las clases, un título visible y el
-tutor o tutora opcional. Los valores se asocian a `ClassIdentifier`, no al texto
+El tercer paso permite editar, para todas las clases que producirán un documento,
+un título visible y el tutor o tutora opcional. Los valores se asocian a
+`ClassIdentifier`, no al texto
 editable ni a la posición de una fila, y se capturan en una instantánea antes de
 ejecutar. Navegar entre revisión y generación conserva el borrador. Volver desde
 la revisión a los archivos descarta el plan, filtros, cabeceras y configuración
@@ -118,7 +118,7 @@ relee las entradas actuales y construye un plan nuevo. Esta edición no relee
 alumnado ni modifica el matching.
 
 Un resultado confirmado sustituye el formulario por un resumen inmutable de la
-ejecución: documentos, alumnado, incidencias, cabeceras y ruta proceden de la
+ejecución: documentos, alumnado incluido y omitido, incidencias, cabeceras y ruta proceden de la
 solicitud y el resultado ejecutados. Un fallo al abrir esa carpeta se presenta por
 separado y no invalida la generación. «Nueva generación» vacía históricos, PDF,
 salida, filtros, cabeceras y resultado, restaura la plantilla incluida y conserva
@@ -145,9 +145,10 @@ modificarse para este caso de uso.
 - no reordena palabras ni aplica coincidencia aproximada.
 
 Una clave puede contener varios candidatos. El sistema conserva todos y solo
-selecciona información cuando existe una coincidencia única o varios históricos
-con la misma firma de información. El nombre visible final siempre procede del
-PDF. El perfil de ordenación predeterminado es `apellidos-coma-nombre`.
+selecciona información cuando existe exactamente una coincidencia histórica. Dos
+o más candidatos constituyen un conflicto aunque su contenido sea idéntico. El
+nombre visible final siempre procede del PDF. El perfil de ordenación
+predeterminado es `apellidos-coma-nombre`.
 
 ## Contrato PDF de grupos
 
@@ -161,8 +162,8 @@ El perfil nuevo reconoce una cabecera `GRUPO` y las columnas `Orden`, `NIA`,
 - texto extraíble y paquete PDF legible.
 
 Los PDF aprobados no declaran un total independiente. Se procesan mediante
-validación estructural estricta y cada clase registra el aviso
-`PdfWithoutDeclaredTotal`. No inventes un total declarado.
+validación estructural estricta sin inventar un total ni registrar una incidencia
+por su ausencia.
 
 ## Contrato DOCX
 
@@ -227,17 +228,13 @@ externa.
 
 ## Incidencias
 
-No bloquean el lote, pero se devuelven para revisión:
+`DuplicateStudentName` no bloquea el lote, pero se devuelve para revisión cuando
+un alumno del PDF tiene varios registros históricos o cuando el mismo nombre
+corresponde a distintos NIA. Todos los alumnos afectados adoptan el estado
+Conflicto y se omiten de la salida. La WPF presenta candidatos y referencias,
+pero todavía no permite resolver el conflicto ni seleccionar un registro.
 
-- `MissingHistoricalStudent`;
-- `EquivalentHistoricalRecords`;
-- `ConflictingHistoricalData`;
-- `AmbiguousStudentIdentity`;
-- `PdfWithoutDeclaredTotal`.
-
-Las contradicciones y ambigüedades nunca copian información histórica. La WPF
-presenta estos datos estructurados para revisión, pero no permite resolverlos ni
-seleccionar arbitrariamente un candidato.
+Alumno nuevo es un estado ordinario y no crea una incidencia.
 
 Bloquean la publicación los problemas estructurales, incluidos:
 
@@ -268,13 +265,13 @@ Bloquean la publicación los problemas estructurales, incluidos:
   valores de cabecera de salida descritos arriba.
 - Los conflictos se representan mediante modelos e incidencias estructuradas;
   la interfaz los explica, pero no permite elegir o editar una resolución.
-- El CLI y la WPF generan filas neutras con los campos históricos vacíos para
-  ausencias, contradicciones y homónimos; nunca eligen información dudosa ni
-  añaden sombreado especial.
+- El CLI y la WPF generan filas neutras para alumnos nuevos. Los conflictos se
+  omiten completamente; si una clase queda sin alumnos incluidos, no se genera
+  su archivo. Nunca se elige información dudosa ni se añade sombreado especial.
 - No se exporta aún un informe JSON independiente. La fuente reutilizable para
   una UI es `ClassGenerationPlan` junto con sus `GenerationIssue`.
 - Los PDF sin total independiente conservan la limitación documentada aunque
-  superen las comprobaciones estructurales.
+  superen las comprobaciones estructurales; esta limitación no es una incidencia.
 - El entorno de validación actual no dispone de LibreOffice para renderizado
   visual automatizado; la validación implementada comprueba estructura,
   identidades, contenido, partes DOCX y publicación. Mantén una revisión visual
@@ -307,10 +304,12 @@ Las entradas privadas están bajo `assets/documents/New feature/`:
 - `TEMPLATES/ANEXO_TEMPLATE.docx`: plantilla validada, SHA-256
   `7cb8ed6b167ab6bf00bdcf460317f942331cec30204ce877994945eaf32aa5cf`.
 
-La simulación esperada actualmente obtiene 22 recuperaciones, 70 ausencias y 2
-asignaciones ambiguas del mismo nombre con NIA distintos. Los resultados reales
-esperados son `2A.docx`, `2B.docx`, `2C.docx` y `2D.docx`, con 24, 22, 25 y 23
-alumnos respectivamente. Nunca conviertas estos recuentos en reglas de negocio.
+La simulación esperada actualmente obtiene 22 alumnos encontrados, 70 alumnos
+nuevos y 2 conflictos del mismo nombre con NIA distintos. Los documentos
+previstos son `2A.docx`, `2B.docx`, `2C.docx` y `2D.docx`, con 23, 22, 24 y 23
+alumnos incluidos respectivamente; las dos asignaciones en conflicto permanecen
+en la revisión y se omiten de los DOCX. Nunca conviertas estos recuentos en reglas
+de negocio.
 
 ## Verificación
 
@@ -357,6 +356,13 @@ El 13 de octubre de 2026 se sustituyó aquella reutilización por el reinicio
 completo descrito arriba. La suite quedó en 154 pruebas: Domain 40, Application
 15, Infrastructure 43, Console 10 y WPF 46. El build terminó sin avisos y el
 formato quedó limpio; no se publicó una entrega nueva.
+
+El rediseño de estados del 13 de octubre de 2026 elevó la suite a 161 pruebas:
+Domain 43, Application 15, Infrastructure 45, Console 11 y WPF 47. El formato,
+el build sin avisos y la suite completa quedaron limpios. Una simulación de solo
+lectura sobre el corpus privado confirmó 22 encontrados, 70 nuevos, 2 conflictos,
+92 alumnos incluidos y documentos previstos de 23/22/24/23 alumnos. No se
+publicó un ejecutable nuevo ni se generaron documentos en esta verificación.
 
 La entrega WPF se republicó el 12 de octubre de 2026 mediante `dotnet publish`
 autocontenido para Windows x64. `release-desktop/DocMerge.exe` conserva versión
