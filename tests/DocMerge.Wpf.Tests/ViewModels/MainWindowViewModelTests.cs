@@ -52,7 +52,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task BackToFilesCommand_UnchangedInputs_ReusesPreparedReview()
+    public async Task BackToFilesCommand_UnchangedInputs_DiscardsReviewAndReanalyzes()
     {
         using var fixture = new ViewModelFixture();
         var viewModel = fixture.CreateViewModel();
@@ -61,11 +61,74 @@ public sealed class MainWindowViewModelTests
         var originalClass = Assert.Single(viewModel.Classes);
 
         viewModel.BackToFilesCommand.Execute(parameter: null);
+        fixture.RosterStudentName = "ALUMNO, DOS";
         await viewModel.AnalyzeCommand.ExecuteAsync();
 
-        Assert.Same(originalClass, Assert.Single(viewModel.Classes));
-        Assert.Equal(1, fixture.RosterReadCount);
+        Assert.NotSame(originalClass, Assert.Single(viewModel.Classes));
+        Assert.Equal("ALUMNO, DOS", Assert.Single(viewModel.VisibleStudents).Name);
+        Assert.Equal(2, fixture.RosterReadCount);
         Assert.Equal(DesktopWorkflowState.Reviewing, viewModel.WorkflowState);
+    }
+
+    [Fact]
+    public async Task AnalyzeCommand_SecondAnalysisCancelled_DoesNotRestorePreviousReview()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        viewModel.BackToFilesCommand.Execute(parameter: null);
+        fixture.BlockRosterRead = true;
+
+        var analysis = viewModel.AnalyzeCommand.ExecuteAsync();
+        await fixture.RosterReadStarted.Task;
+        viewModel.CancelOperation();
+        await analysis;
+
+        Assert.Equal(DesktopWorkflowState.AnalysisCancelled, viewModel.WorkflowState);
+        Assert.Empty(viewModel.Classes);
+        Assert.Empty(viewModel.Issues);
+        Assert.Empty(viewModel.ClassHeaders);
+        Assert.False(viewModel.CanContinueToGeneration);
+    }
+
+    [Fact]
+    public async Task BackToFilesCommand_PreparedWorkflow_ResetsDerivedStateAndKeepsInputs()
+    {
+        using var fixture = new ViewModelFixture { TemplateSupportsHeader = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        var historicalPath = viewModel.HistoricalInput.Path;
+        var rosterPath = viewModel.RosterInput.Path;
+        var templatePath = viewModel.TemplateInput.Path;
+        viewModel.SearchText = "alumno";
+        viewModel.SelectedFilter = "Sin histórico";
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+        Assert.Single(viewModel.ClassHeaders).DisplayTitle = "Título anterior";
+        viewModel.OutputFolderName = "Salida anterior";
+        viewModel.BrowseOutputCommand.Execute(parameter: null);
+        viewModel.BackToReviewCommand.Execute(parameter: null);
+
+        viewModel.BackToFilesCommand.Execute(parameter: null);
+
+        Assert.Equal(DesktopWorkflowState.Selecting, viewModel.WorkflowState);
+        Assert.Equal(historicalPath, viewModel.HistoricalInput.Path);
+        Assert.Equal(rosterPath, viewModel.RosterInput.Path);
+        Assert.Equal(templatePath, viewModel.TemplateInput.Path);
+        Assert.All(
+            new[] { viewModel.HistoricalInput, viewModel.RosterInput, viewModel.TemplateInput },
+            input => Assert.Equal(InputSelectionState.Selected, input.State));
+        Assert.Empty(viewModel.Classes);
+        Assert.Empty(viewModel.Issues);
+        Assert.Empty(viewModel.ClassHeaders);
+        Assert.Empty(viewModel.VisibleStudents);
+        Assert.Null(viewModel.SelectedClass);
+        Assert.Equal(string.Empty, viewModel.SearchText);
+        Assert.Equal("Todos los estados", viewModel.SelectedFilter);
+        Assert.Null(viewModel.OutputParent);
+        Assert.Equal("Clases generadas", viewModel.OutputFolderName);
+        Assert.False(viewModel.CanContinueToGeneration);
     }
 
     [Fact]
@@ -406,9 +469,10 @@ public sealed class MainWindowViewModelTests
         internal bool UseMixedReview { get; init; }
 
         internal bool TemplateSupportsHeader { get; init; }
-        internal bool BlockRosterRead { get; init; }
+        internal bool BlockRosterRead { get; set; }
         internal bool BlockPublishing { get; init; }
         internal bool BlockBundledTemplate { get; init; }
+        internal string RosterStudentName { get; set; } = "ALUMNO, UNO";
         internal int PublishCount { get; private set; }
         internal int RosterReadCount { get; private set; }
         internal TaskCompletionSource RosterReadStarted { get; } = new(
@@ -435,7 +499,7 @@ public sealed class MainWindowViewModelTests
             var discovery = new StubDiscovery(inputs);
             var preparation = new ClassGenerationService(
                 discovery,
-                new StubRosterReader(this, RosterPath, FailRosterRead, UseMixedReview, BlockRosterRead),
+                new StubRosterReader(this, RosterPath, FailRosterRead, UseMixedReview),
                 new StubTemplateReader(TemplatePath, TemplateSupportsHeader),
                 new StubHistoricalReader(HistoricalPath, UseMixedReview),
                 new ClassGenerationPlanner(new HistoricalStudentResolver()));
@@ -482,8 +546,7 @@ public sealed class MainWindowViewModelTests
             ViewModelFixture fixture,
             string path,
             bool fail,
-            bool useMixedReview,
-            bool block) : IClassRosterReader
+            bool useMixedReview) : IClassRosterReader
         {
             public async Task<ClassRoster> ReadAsync(string ignored, CancellationToken cancellationToken)
             {
@@ -493,7 +556,7 @@ public sealed class MainWindowViewModelTests
                     throw new IOException("Roster read failed.");
                 }
 
-                if (block)
+                if (fixture.BlockRosterRead)
                 {
                     fixture.RosterReadStarted.TrySetResult();
                     await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
@@ -501,7 +564,7 @@ public sealed class MainWindowViewModelTests
 
                 var entries = useMixedReview
                     ? MixedEntries()
-                    : [Entry("ALUMNO, UNO", "12345678", 1)];
+                    : [Entry(fixture.RosterStudentName, "12345678", 1)];
                 return new ClassRoster(
                     path, "roster-hash", new ClassIdentifier("ESO", 2, "A"), entries, 1, false);
             }

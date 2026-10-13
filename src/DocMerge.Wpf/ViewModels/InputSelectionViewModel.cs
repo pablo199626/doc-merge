@@ -206,6 +206,25 @@ public sealed class InputSelectionViewModel : ViewModelBase
         State = InputSelectionState.Validated;
     }
 
+    /// <summary>Discards analysis state while preserving the selected path and template identity.</summary>
+    public void ResetAnalysis()
+    {
+        Error = null;
+        Count = null;
+        IsBusy = false;
+        if (!HasSelection)
+        {
+            Status = "Sin seleccionar";
+            State = InputSelectionState.Empty;
+            return;
+        }
+
+        Status = IsBundled
+            ? "Incluida con Talos · pendiente de analizar"
+            : "Seleccionado · pendiente de analizar";
+        State = InputSelectionState.Selected;
+    }
+
     /// <summary>Marks this input with an actionable error.</summary>
     public void SetError(string message)
     {

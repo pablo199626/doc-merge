@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     private readonly MainWindowViewModel _viewModel;
     private readonly Stopwatch _sidebarAnimationClock = new();
     private readonly ReviewRowActivationTracker _reviewRowActivation = new();
+    private IInputElement? _detailFocusTarget;
     private bool _isClosePending;
     private bool _isCloseAuthorized;
     private bool _isSidebarAnimating;
@@ -229,7 +230,7 @@ public partial class MainWindow : Window
     private void ShowDetail(object? sender, DetailRequestedEventArgs e)
     {
         var session = _viewModel.SessionSequence;
-        var invoker = Keyboard.FocusedElement;
+        var invoker = _detailFocusTarget ?? Keyboard.FocusedElement;
         var dialog = new DetailWindow(e.Title, e.Body) { Owner = this };
         dialog.ShowDialog();
         Dispatcher.BeginInvoke(new Action(() =>
@@ -327,9 +328,19 @@ public partial class MainWindow : Window
 
     private void OpenStudentDetail(StudentReviewViewModel student)
     {
-        if (_viewModel.ShowStudentCommand.CanExecute(student))
+        if (!_viewModel.ShowStudentCommand.CanExecute(student))
+        {
+            return;
+        }
+
+        _detailFocusTarget = ReviewGrid;
+        try
         {
             _viewModel.ShowStudentCommand.Execute(student);
+        }
+        finally
+        {
+            _detailFocusTarget = null;
         }
     }
 

@@ -90,7 +90,9 @@ animaciones.
 El detalle de alumno y el informe de incidencias usan recursos dinámicos desde
 su primer fotograma. Presentan identidad, clase, resolución, procedencia,
 consecuencia y referencias sin permitir edición. La tabla conserva una selección
-legible con y sin foco, incluso mientras el detalle modal está abierto.
+legible con y sin foco, incluso mientras el detalle modal está abierto. Al cerrar
+un detalle, una activación por fila o Enter devuelve el foco a la tabla sin dibujar
+un contorno sobre una celda aislada; el botón «Ver detalle» recupera su propio foco.
 
 La salida se elige después de revisar. La ejecución conserva el objeto
 `PreparedClassGeneration` revisado y no crea silenciosamente un plan diferente.
@@ -109,9 +111,11 @@ espera y los intentos de cierre repetidos no eluden la limpieza.
 El tercer paso permite editar, para todas las clases, un título visible y el
 tutor o tutora opcional. Los valores se asocian a `ClassIdentifier`, no al texto
 editable ni a la posición de una fila, y se capturan en una instantánea antes de
-ejecutar. Navegar entre revisión y generación conserva el borrador; cambiar una
-entrada invalida el plan y reinicia las cabeceras al volver a analizar. Esta
-edición no relee alumnado ni modifica el matching.
+ejecutar. Navegar entre revisión y generación conserva el borrador. Volver desde
+la revisión a los archivos descarta el plan, filtros, cabeceras y configuración
+de salida, pero conserva las rutas seleccionadas; «Analizar y continuar» siempre
+relee las entradas actuales y construye un plan nuevo. Esta edición no relee
+alumnado ni modifica el matching.
 
 Un resultado confirmado sustituye el formulario por un resumen inmutable de la
 ejecución: documentos, alumnado, incidencias, cabeceras y ruta proceden de la
@@ -342,12 +346,17 @@ automatizar la inspección visual, que permanece como comprobación manual
 pendiente antes de distribuir una nueva entrega.
 
 El pulido final de estados WPF del 12 de octubre de 2026 elevó la suite a 148
-pruebas: Domain 40, Application 15, Infrastructure 43, Console 10 y WPF 40. Cubre
-reutilización del plan al volver, resultado inmutable, reinicio de sesión,
-cancelación de análisis conservando la plantilla incluida y la frontera de
-guardado que mantiene como éxito una publicación completada. La validación
+pruebas: Domain 40, Application 15, Infrastructure 43, Console 10 y WPF 40. Cubría
+la reutilización histórica del plan al volver, resultado inmutable, reinicio de
+sesión, cancelación de análisis conservando la plantilla incluida y la frontera
+de guardado que mantiene como éxito una publicación completada. La validación
 visual/manual exhaustiva de estos estados sigue separada de las pruebas
 automatizadas.
+
+El 13 de octubre de 2026 se sustituyó aquella reutilización por el reinicio
+completo descrito arriba. La suite quedó en 154 pruebas: Domain 40, Application
+15, Infrastructure 43, Console 10 y WPF 46. El build terminó sin avisos y el
+formato quedó limpio; no se publicó una entrega nueva.
 
 La entrega WPF se republicó el 12 de octubre de 2026 mediante `dotnet publish`
 autocontenido para Windows x64. `release-desktop/DocMerge.exe` conserva versión

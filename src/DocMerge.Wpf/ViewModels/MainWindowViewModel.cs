@@ -865,14 +865,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private async Task AnalyzeAsync()
     {
-        if (_prepared is not null && WorkflowState == DesktopWorkflowState.Selecting)
-        {
-            WorkflowState = DesktopWorkflowState.Reviewing;
-            return;
-        }
-
+        InvalidatePreparedReview();
         var revision = _inputRevision;
-        GeneralError = null;
         StartInputAnalysis();
         var (operation, cancellation) = BeginOperation();
         WorkflowState = DesktopWorkflowState.Analyzing;
@@ -1000,7 +994,11 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             ProgressText = string.Empty;
             if (inputsChanged)
             {
+                var finalStatus = FinalStatus;
+                var generalError = GeneralError;
                 InvalidatePreparedReview();
+                FinalStatus = finalStatus;
+                GeneralError = generalError;
                 WorkflowState = completionState;
             }
             else
@@ -1084,7 +1082,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (WorkflowState == DesktopWorkflowState.Reviewing)
         {
-            WorkflowState = DesktopWorkflowState.Selecting;
+            InvalidatePreparedReview();
         }
     }
 
@@ -1364,10 +1362,19 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         ClearClassHeaders();
         VisibleStudents.Clear();
         SelectedClass = null;
+        ClearReviewFilters();
+        foreach (var input in Inputs())
+        {
+            input.ResetAnalysis();
+        }
+
         GenerationResult = null;
         FinalStatus = null;
         OutputOpenError = null;
         GeneralError = null;
+        ProgressText = string.Empty;
+        OutputParent = null;
+        OutputFolderName = "Clases generadas";
         OnPropertyChanged(nameof(BatchSummary));
         OnPropertyChanged(nameof(HasBlockingIssues));
         OnPropertyChanged(nameof(CanContinueToGeneration));
