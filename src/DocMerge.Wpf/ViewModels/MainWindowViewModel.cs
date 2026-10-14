@@ -130,6 +130,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         ShowIssueGroupCommand = new RelayCommand(ShowIssueGroup);
         OpenStudentDetailCommand = new RelayCommand(OpenStudentDetail);
         FilterByStatusCommand = new RelayCommand(FilterByStatus);
+        FilterClassByStatusCommand = new RelayCommand(FilterClassByStatus);
         ClearReviewFiltersCommand = new RelayCommand(_ => ClearReviewFilters(), _ => HasActiveReviewFilters);
         SetThemeCommand = new RelayCommand(SetTheme);
         ToggleSidebarCommand = new RelayCommand(_ => IsSidebarExpanded = !IsSidebarExpanded);
@@ -222,6 +223,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     /// <summary>Gets the command that activates a review-only status filter.</summary>
     public RelayCommand FilterByStatusCommand { get; }
+
+    /// <summary>Gets the command that selects a class card and activates its status filter.</summary>
+    public RelayCommand FilterClassByStatusCommand { get; }
 
     /// <summary>Gets the command that clears search and status filters.</summary>
     public RelayCommand ClearReviewFiltersCommand { get; }
@@ -1266,7 +1270,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         {
             OnPropertyChanged(nameof(VisibleStudentSummary));
             OnPropertyChanged(nameof(HasVisibleStudents));
-            StudentDetail.UpdateVisibleStudents(VisibleStudents);
+            StudentDetail.UpdateVisibleStudents(VisibleStudents, GetStudentNavigationContext());
             return;
         }
 
@@ -1279,7 +1283,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
         OnPropertyChanged(nameof(VisibleStudentSummary));
         OnPropertyChanged(nameof(HasVisibleStudents));
-        StudentDetail.UpdateVisibleStudents(VisibleStudents);
+        StudentDetail.UpdateVisibleStudents(VisibleStudents, GetStudentNavigationContext());
     }
 
     private static bool MatchesSearch(StudentReviewViewModel student, string search) =>
@@ -1357,7 +1361,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         SelectedStudent = student;
-        StudentDetail.Open(student, VisibleStudents);
+        StudentDetail.Open(student, VisibleStudents, GetStudentNavigationContext());
     }
 
     private void ShowIssueGroup(object? parameter)
@@ -1394,6 +1398,30 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
         SelectedFilter = SelectedFilter == filter ? AllStatusesFilter : filter;
     }
+
+    private void FilterClassByStatus(object? parameter)
+    {
+        if (parameter is not ClassStatusFilterRequest request
+            || !Classes.Contains(request.ClassReview))
+        {
+            return;
+        }
+
+        var filter = StudentReviewText.Status(request.ResolutionType);
+        if (!StatusFilters.Contains(filter, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        var togglesCurrentFilter = ReferenceEquals(SelectedClass, request.ClassReview)
+            && SelectedFilter == filter;
+        SelectedClass = request.ClassReview;
+        SelectedFilter = togglesCurrentFilter ? AllStatusesFilter : filter;
+    }
+
+    private StudentNavigationContext GetStudentNavigationContext() => HasActiveReviewFilters
+        ? StudentNavigationContext.FilteredResults
+        : StudentNavigationContext.CompleteClass;
 
     private void ClearReviewFilters()
     {

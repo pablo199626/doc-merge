@@ -97,27 +97,37 @@ Por debajo se compactan las clases; con menos de 1210 DIP útiles el detalle pas
 vista principal temporal con «Volver al listado», conservando la instancia de la
 tabla, sus filtros y selección. La transición de 200 ms modifica progresivamente
 el espacio reservado al detalle, recortado por el área de revisión, sin superponerlo
-a la tabla. Cabecera, resultado y navegación inferior permanecen fijos; solo el
-cuerpo tiene scroll. Cambiar de clase, excluir
+a la tabla. La cabecera y el resultado permanecen fijos; la única navegación entre
+alumnos está integrada en la tercera línea de la cabecera y solo el cuerpo tiene
+scroll. Cambiar de clase, excluir
 mediante filtros al alumno visible o abandonar la revisión cierra y descarta el
 detalle.
 
 Los tres paneles comparten margen exterior de 5 DIP, borde y radio de 12 DIP.
 Las tarjetas de clases distribuyen identidad y badges en dos filas, con medición
-limitada al viewport y scroll exclusivamente vertical. La revisión usa verde para
+limitada al viewport y scroll exclusivamente vertical. Muestran en ese orden los
+recuentos no vacíos de Encontrado, Alumno nuevo y Conflicto; sus acciones seleccionan
+la clase propietaria antes de filtrar. La revisión usa verde para
 Encontrado, azul para Alumno nuevo y rojo para Conflicto, reutilizando los recursos
 semánticos; los avisos independientes conservan sus colores. El cuerpo del detalle
-reserva espacio lateral para la scrollbar de WPF-UI, separado de la navegación fija.
+reserva espacio lateral para la scrollbar de WPF-UI y aprovecha hasta el borde
+inferior el espacio recuperado al retirar la navegación duplicada.
 En alturas útiles reducidas se oculta el resumen superior de entradas para dejar
 espacio legible al cuerpo. La procedencia de la tabla se oculta cuando no cabe;
 nombre, NIA y estado se conservan y la procedencia sigue disponible en el detalle.
 
 La cabecera fija presenta identidad, clase, NIA, estado, posición dentro de los
-resultados visibles y navegación anterior/siguiente. La navegación sigue
+resultados visibles y navegación anterior/siguiente en un único grupo compacto.
+Cuando hay búsqueda o filtros, el contador identifica explícitamente los resultados.
+La navegación sigue
 exactamente `VisibleStudents`, por lo que respeta búsqueda, filtro y orden. La
 activación por fila, Enter o «Ver detalle» conserva las protecciones frente a
 scrollbars y arrastre; al cerrar se restaura la tabla o el botón de origen. Escape
 cierra primero el detalle y las animaciones se omiten cuando Windows las desactiva.
+El cierre lateral usa un icono y, en la vista estrecha, se sustituye por «Volver al
+listado». El acceso general a incidencias permanece en el resumen inferior de la
+tabla; se retiró del pie de acciones de la revisión, sin afectar al acceso del
+resultado final.
 
 «Medidas del alumno» combina en orden las celdas históricas no identificativas y
 no vacías. `DocxHistoricalStudentReader` prepara durante la única lectura inicial
@@ -447,3 +457,13 @@ alumno, transiciones interrumpidas y recuperación del ancho al cerrar. Se revis
 capturas con datos ficticios a 1920×1080 y 1366×768, claro/oscuro, modo estrecho y
 escalado de layout al 150 %. Este último no sustituye pruebas con DPI nativo de
 Windows. La suite pasa a 181 pruebas (WPF 61); no se publica una entrega nueva.
+
+El refinamiento posterior de tarjetas y navegación deja los tres indicadores de
+estado en cada clase, unifica la navegación del alumno en la cabecera, sustituye el
+cierre textual por un icono accesible, elimina la fila inferior duplicada y traslada
+el acceso global a incidencias al resumen de la tabla. La prueba STA verifica además
+posición filtrada, extremos deshabilitados, cierre por Escape y control invocado,
+retorno de foco, nombre largo y ausencia del antiguo botón del pie. Se revisaron
+capturas ficticias amplias, compactas y estrechas en claro y oscuro. La suite pasa a
+185 pruebas (WPF 65); build, formato y `git diff --check` quedan limpios. No se
+publica una entrega nueva.

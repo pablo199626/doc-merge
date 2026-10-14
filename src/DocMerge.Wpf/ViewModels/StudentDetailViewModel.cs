@@ -13,6 +13,7 @@ public sealed class StudentDetailViewModel : ViewModelBase
     private IReadOnlyList<StudentReviewViewModel> _visibleStudents = [];
     private StudentReviewViewModel? _student;
     private HistoricalStudentCandidate? _inspectedCandidate;
+    private StudentNavigationContext _navigationContext;
     private bool _isOpen;
     private string? _sourceOpenError;
 
@@ -147,7 +148,9 @@ public sealed class StudentDetailViewModel : ViewModelBase
     public int VisibleCount => _visibleStudents.Count;
 
     /// <summary>Gets the contextual position text.</summary>
-    public string PositionText => $"{Position} de {VisibleCount}";
+    public string PositionText => _navigationContext == StudentNavigationContext.FilteredResults
+        ? $"{Position} de {VisibleCount} {(VisibleCount == 1 ? "resultado" : "resultados")}"
+        : $"{Position} de {VisibleCount}";
 
     /// <summary>Gets a value that indicates whether previous-student navigation is available.</summary>
     public bool CanNavigatePrevious => Position > 1;
@@ -261,25 +264,32 @@ public sealed class StudentDetailViewModel : ViewModelBase
 
     /// <summary>Opens the detail for a student within the current visible result set.</summary>
     /// <param name="student">The student to display.</param>
-    /// <param name="visibleStudents">The filtered students in navigation order.</param>
+    /// <param name="visibleStudents">The visible students in navigation order.</param>
+    /// <param name="navigationContext">The context represented by the visible set.</param>
     public void Open(
         StudentReviewViewModel student,
-        IReadOnlyList<StudentReviewViewModel> visibleStudents)
+        IReadOnlyList<StudentReviewViewModel> visibleStudents,
+        StudentNavigationContext navigationContext = StudentNavigationContext.CompleteClass)
     {
         ArgumentNullException.ThrowIfNull(student);
         ArgumentNullException.ThrowIfNull(visibleStudents);
         _visibleStudents = Array.AsReadOnly(visibleStudents.ToArray());
+        _navigationContext = navigationContext;
         Student = student;
         IsOpen = true;
         NotifyNavigationChanged();
     }
 
     /// <summary>Updates the filtered navigation set and closes when the student is excluded.</summary>
-    /// <param name="visibleStudents">The filtered students in navigation order.</param>
-    public void UpdateVisibleStudents(IReadOnlyList<StudentReviewViewModel> visibleStudents)
+    /// <param name="visibleStudents">The visible students in navigation order.</param>
+    /// <param name="navigationContext">The context represented by the visible set.</param>
+    public void UpdateVisibleStudents(
+        IReadOnlyList<StudentReviewViewModel> visibleStudents,
+        StudentNavigationContext navigationContext = StudentNavigationContext.CompleteClass)
     {
         ArgumentNullException.ThrowIfNull(visibleStudents);
         _visibleStudents = Array.AsReadOnly(visibleStudents.ToArray());
+        _navigationContext = navigationContext;
         if (Student is not null && IndexOfStudent(Student) < 0)
         {
             Close();
@@ -475,6 +485,16 @@ public sealed class StudentDetailViewModel : ViewModelBase
         field.PreviewContent.HasContent
         || field.HasNonTextContent
         || !string.IsNullOrWhiteSpace(field.Text);
+}
+
+/// <summary>Describes whether student navigation covers a complete class or filtered results.</summary>
+public enum StudentNavigationContext
+{
+    /// <summary>Navigation covers every student in the selected class.</summary>
+    CompleteClass,
+
+    /// <summary>Navigation covers only the current search or status results.</summary>
+    FilteredResults,
 }
 
 /// <summary>Identifies a source document shown in the integrated student detail.</summary>

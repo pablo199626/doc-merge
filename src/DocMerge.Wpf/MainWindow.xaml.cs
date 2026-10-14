@@ -402,6 +402,12 @@ public partial class MainWindow : Window
 
         StudentDetailPanel.Visibility = Visibility.Visible;
         AnimateStudentDetail(1);
+        if (BackToStudentListButton.IsVisible)
+        {
+            BackToStudentListButton.Focus();
+            return;
+        }
+
         CloseStudentDetailButton.Focus();
     }
 
@@ -478,6 +484,7 @@ public partial class MainWindow : Window
         ReviewSourceColumn.Visibility = width - ClassesColumn.Width.Value - (hasDetail ? detailWidth : 0) >= 780
             ? Visibility.Visible : Visibility.Collapsed;
         BackToStudentListButton.Visibility = fullDetail ? Visibility.Visible : Visibility.Collapsed;
+        CloseStudentDetailButton.Visibility = fullDetail ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void RestoreStudentDetailFocus()

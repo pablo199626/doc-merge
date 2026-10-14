@@ -68,6 +68,27 @@ public sealed record ClassIssueGroupViewModel(
     string Title,
     IReadOnlyList<ReviewIssueViewModel> Issues);
 
+/// <summary>Represents a status filter requested from one class card.</summary>
+public sealed class ClassStatusFilterRequest
+{
+    /// <summary>Initializes a new instance of the <see cref="ClassStatusFilterRequest"/> class.</summary>
+    /// <param name="classReview">The class whose students will be shown.</param>
+    /// <param name="resolutionType">One of the enumeration values that specifies the student status.</param>
+    public ClassStatusFilterRequest(
+        ClassReviewViewModel classReview,
+        HistoricalResolutionType resolutionType)
+    {
+        ClassReview = classReview;
+        ResolutionType = resolutionType;
+    }
+
+    /// <summary>Gets the class whose students will be shown.</summary>
+    public ClassReviewViewModel ClassReview { get; }
+
+    /// <summary>Gets the student status to filter.</summary>
+    public HistoricalResolutionType ResolutionType { get; }
+}
+
 /// <summary>Represents one class in the review list.</summary>
 public sealed record ClassReviewViewModel(
     ClassDocumentPlan Plan,
@@ -124,8 +145,14 @@ public sealed record ClassReviewViewModel(
     /// <summary>Gets an accessible summary of found students.</summary>
     public string FoundSummary => CountText(FoundCount, "alumno encontrado", "alumnos encontrados");
 
+    /// <summary>Gets the found-student filter requested from this class card.</summary>
+    public ClassStatusFilterRequest FoundFilterRequest => new(this, HistoricalResolutionType.Found);
+
     /// <summary>Gets an accessible summary of new students.</summary>
     public string NewStudentSummary => CountText(NewStudentCount, "alumno nuevo", "alumnos nuevos");
+
+    /// <summary>Gets the new-student filter requested from this class card.</summary>
+    public ClassStatusFilterRequest NewStudentFilterRequest => new(this, HistoricalResolutionType.NewStudent);
 
     /// <summary>Gets an accessible summary of conflicted students.</summary>
     public string ConflictSummary => CountText(ConflictCount, "alumno en conflicto", "alumnos en conflicto");

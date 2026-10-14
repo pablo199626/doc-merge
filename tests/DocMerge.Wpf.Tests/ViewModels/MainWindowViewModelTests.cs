@@ -412,6 +412,27 @@ public sealed partial class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task FilterClassByStatus_CardRequest_SelectsClassAndPreservesClassTotals()
+    {
+        using var fixture = new ViewModelFixture { UseMixedReview = true };
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        var classReview = Assert.Single(viewModel.Classes);
+        viewModel.SelectedClass = null;
+
+        viewModel.FilterClassByStatusCommand.Execute(classReview.FoundFilterRequest);
+
+        Assert.Same(classReview, viewModel.SelectedClass);
+        Assert.Equal("Encontrado", viewModel.SelectedFilter);
+        Assert.Equal(2, viewModel.VisibleStudents.Count);
+        Assert.Equal(7, classReview.StudentCount);
+        Assert.Equal(2, classReview.FoundCount);
+        Assert.Equal(1, classReview.NewStudentCount);
+        Assert.Equal(4, classReview.ConflictCount);
+    }
+
+    [Fact]
     public async Task ClearReviewFilters_SearchAndStatus_RestoresAllStudents()
     {
         using var fixture = new ViewModelFixture { UseMixedReview = true };
@@ -646,7 +667,7 @@ public sealed partial class MainWindowViewModelTests
 
             private static ClassRosterEntry[] MixedEntries() =>
             [
-                Entry("ÚNICO, ALUMNO", "10000001", 1),
+                Entry("APELLIDOS EXTRAORDINARIAMENTE LARGOS, ALUMNO CON NOMBRE COMPUESTO", "10000001", 1),
                 Entry("EQUIVALENTE, ALUMNO", "10000002", 2),
                 Entry("AUSENTE, ALUMNO", "10000003", 3),
                 Entry("CONFLICTO, ALUMNO", "10000004", 4),
@@ -699,7 +720,7 @@ public sealed partial class MainWindowViewModelTests
 
             private HistoricalStudentCandidate[] MixedCandidates(string path) =>
             [
-                Candidate(path, "ÚNICO, ALUMNO"),
+                Candidate(path, "APELLIDOS EXTRAORDINARIAMENTE LARGOS, ALUMNO CON NOMBRE COMPUESTO"),
                 Candidate(path, "EQUIVALENTE, ALUMNO"),
                 Candidate(path + ".copy", "EQUIVALENTE, ALUMNO"),
                 Candidate(path, "CONFLICTO, ALUMNO"),

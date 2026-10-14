@@ -652,12 +652,26 @@
                                                      <TextBlock Text="{Binding StudentSummary}"
                                                                Style="{StaticResource MutedText}" FontSize="12" />
                                                 </StackPanel>
-                                                 <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
-                                                     <Button Style="{StaticResource FilterPillButton}" Padding="7,3" Margin="3"
-                                                             Background="{DynamicResource InformationSoftBrush}"
-                                                             BorderBrush="{DynamicResource InformationBrush}"
-                                                             Command="{Binding DataContext.FilterByStatusCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                             CommandParameter="Alumno nuevo"
+                                                  <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                                                      <Button Style="{StaticResource FilterPillButton}" Padding="7,3" Margin="3"
+                                                              Background="{DynamicResource SuccessSoftBrush}"
+                                                              BorderBrush="{DynamicResource SuccessBrush}"
+                                                              Command="{Binding DataContext.FilterClassByStatusCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              CommandParameter="{Binding FoundFilterRequest}"
+                                                              ToolTip="{Binding FoundSummary}"
+                                                              automation:AutomationProperties.Name="{Binding FoundSummary}"
+                                                              Visibility="{Binding HasFoundStudents, Converter={StaticResource BooleanVisibility}}">
+                                                          <StackPanel Orientation="Horizontal">
+                                                              <ui:SymbolIcon Symbol="CheckmarkCircle16" FontSize="14" Foreground="{DynamicResource SuccessBrush}" />
+                                                              <TextBlock Text="{Binding FoundCount}" Margin="4,0,0,0"
+                                                                         Foreground="{DynamicResource SuccessBrush}" FontSize="11" />
+                                                          </StackPanel>
+                                                      </Button>
+                                                      <Button Style="{StaticResource FilterPillButton}" Padding="7,3" Margin="3"
+                                                              Background="{DynamicResource InformationSoftBrush}"
+                                                              BorderBrush="{DynamicResource InformationBrush}"
+                                                              Command="{Binding DataContext.FilterClassByStatusCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              CommandParameter="{Binding NewStudentFilterRequest}"
                                                              ToolTip="{Binding NewStudentSummary}"
                                                              automation:AutomationProperties.Name="{Binding NewStudentSummary}"
                                                              Visibility="{Binding HasNewStudents, Converter={StaticResource BooleanVisibility}}">
@@ -913,12 +927,33 @@
                                     </Border>
                                    </Grid>
                                  </Border>
-                                 <WrapPanel Grid.Row="4" Margin="0,8,0,0">
-                                     <TextBlock Text="{Binding VisibleStudentSummary}" Style="{StaticResource MutedText}" />
-                                     <TextBlock Text="{Binding ActiveFilterSummary, StringFormat= · {0}}" Margin="8,0,0,0"
-                                                Foreground="{DynamicResource AccentBrush}"
-                                                Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
-                                 </WrapPanel>
+                                 <Grid Grid.Row="4" Margin="0,8,0,0">
+                                     <Grid.ColumnDefinitions>
+                                         <ColumnDefinition Width="*" />
+                                         <ColumnDefinition Width="Auto" />
+                                     </Grid.ColumnDefinitions>
+                                     <WrapPanel VerticalAlignment="Center">
+                                         <TextBlock Text="{Binding VisibleStudentSummary}" Style="{StaticResource MutedText}" />
+                                         <TextBlock Text="{Binding ActiveFilterSummary, StringFormat= · {0}}" Margin="8,0,0,0"
+                                                    Foreground="{DynamicResource AccentBrush}"
+                                                    Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
+                                     </WrapPanel>
+                                     <Button Grid.Column="1"
+                                             Content="Consultar incidencias del lote"
+                                             Command="{Binding ShowAllIssuesCommand}"
+                                             ToolTip="Abrir todas las incidencias y bloqueos del lote"
+                                             automation:AutomationProperties.Name="Consultar incidencias y bloqueos del lote">
+                                         <Button.Style>
+                                             <Style TargetType="Button" BasedOn="{StaticResource InlineDetailButton}">
+                                                 <Style.Triggers>
+                                                     <DataTrigger Binding="{Binding Issues.Count}" Value="0">
+                                                         <Setter Property="Visibility" Value="Collapsed" />
+                                                     </DataTrigger>
+                                                 </Style.Triggers>
+                                             </Style>
+                                         </Button.Style>
+                                     </Button>
+                                 </Grid>
                              </Grid>
                          </Border>
 
@@ -928,12 +963,11 @@
                                 HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                 Visibility="Collapsed">
                             <Grid DataContext="{Binding StudentDetail}">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                                 <Grid.RowDefinitions>
+                                     <RowDefinition Height="Auto" />
+                                     <RowDefinition Height="Auto" />
+                                     <RowDefinition Height="*" />
+                                 </Grid.RowDefinitions>
 
                                 <Grid Margin="16,14,16,0">
                                     <Grid.RowDefinitions>
@@ -945,26 +979,20 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="StudentDetailHeading" Text="{Binding Name}"
-                                               FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"
-                                               ToolTip="{Binding Name}" Focusable="True"
-                                               automation:AutomationProperties.Name="{Binding Name}" />
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                        <Button x:Name="BackToStudentListButton" Content="Volver al listado" Visibility="Collapsed"
-                                                Command="{Binding CloseCommand}" Margin="0,0,6,0" />
-                                        <Button Content="‹" Width="40" Height="40" Margin="3,0"
-                                                Command="{Binding PreviousStudentCommand}"
-                                                ToolTip="Alumno anterior"
-                                                automation:AutomationProperties.Name="Alumno anterior" />
-                                        <Button Content="›" Width="40" Height="40" Margin="3,0"
-                                                Command="{Binding NextStudentCommand}"
-                                                ToolTip="Alumno siguiente"
-                                                automation:AutomationProperties.Name="Alumno siguiente" />
-                                        <Button x:Name="CloseStudentDetailButton" Content="×" Width="40" Height="40" Margin="3,0,0,0"
-                                                Command="{Binding CloseCommand}"
-                                                ToolTip="Cerrar detalle"
-                                                automation:AutomationProperties.Name="Cerrar detalle del alumno" />
-                                    </StackPanel>
+                                     <TextBlock x:Name="StudentDetailHeading" Text="{Binding Name}" Margin="0,5,12,0"
+                                                FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                ToolTip="{Binding Name}" Focusable="True"
+                                                automation:AutomationProperties.Name="{Binding Name}" />
+                                     <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                         <Button x:Name="BackToStudentListButton" Content="Volver al listado" Visibility="Collapsed"
+                                                 Command="{Binding CloseCommand}" Margin="0,0,6,0" />
+                                         <Button x:Name="CloseStudentDetailButton" Style="{StaticResource DetailIconButton}"
+                                                 Command="{Binding CloseCommand}"
+                                                 ToolTip="Cerrar detalle (Esc)"
+                                                 automation:AutomationProperties.Name="Cerrar detalle del alumno">
+                                             <ui:SymbolIcon Symbol="Dismiss20" FontSize="20" />
+                                         </Button>
+                                     </StackPanel>
                                     <TextBlock Grid.Row="1">
                                         <TextBlock.Inlines>
                                             <Run Text="{Binding ClassCode, Mode=OneWay}" />
@@ -1052,9 +1080,33 @@
                                                 </TextBlock>
                                             </StackPanel>
                                         </Border>
-                                        <TextBlock Grid.Column="1" Text="{Binding PositionText}" VerticalAlignment="Center"
-                                                   Style="{StaticResource MutedText}"
-                                                   automation:AutomationProperties.Name="{Binding PositionText, StringFormat=Alumno {0} resultados visibles}" />
+                                         <Border x:Name="StudentNavigation" Grid.Column="1" CornerRadius="10"
+                                                 Background="{DynamicResource SurfaceAltBrush}"
+                                                 BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="2">
+                                             <Grid>
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="Auto" />
+                                                     <ColumnDefinition Width="Auto" />
+                                                     <ColumnDefinition Width="Auto" />
+                                                 </Grid.ColumnDefinitions>
+                                                 <Button x:Name="PreviousStudentButton" Style="{StaticResource DetailIconButton}"
+                                                         Command="{Binding PreviousStudentCommand}"
+                                                         ToolTip="Alumno anterior"
+                                                         automation:AutomationProperties.Name="Alumno anterior">
+                                                     <ui:SymbolIcon Symbol="ChevronLeft20" FontSize="20" />
+                                                 </Button>
+                                                 <TextBlock x:Name="StudentPositionText" Grid.Column="1" Text="{Binding PositionText}"
+                                                            MinWidth="74" Margin="8,0" TextAlignment="Center"
+                                                            VerticalAlignment="Center" Style="{StaticResource MutedText}"
+                                                            automation:AutomationProperties.Name="{Binding PositionText, StringFormat=Posición del alumno: {0}}" />
+                                                 <Button x:Name="NextStudentButton" Grid.Column="2" Style="{StaticResource DetailIconButton}"
+                                                         Command="{Binding NextStudentCommand}"
+                                                         ToolTip="Alumno siguiente"
+                                                         automation:AutomationProperties.Name="Alumno siguiente">
+                                                     <ui:SymbolIcon Symbol="ChevronRight20" FontSize="20" />
+                                                 </Button>
+                                             </Grid>
+                                         </Border>
                                     </Grid>
                                 </Grid>
 
@@ -1142,12 +1194,18 @@
                                                     <TextBlock Text="Medidas del alumno" FontWeight="SemiBold" FontSize="15" />
                                                     <StackPanel Grid.Column="1" Orientation="Horizontal"
                                                                 Visibility="{Binding HasCandidates, Converter={StaticResource BooleanVisibility}}">
-                                                        <Button Content="‹" Width="32" Height="30" Command="{Binding PreviousCandidateCommand}"
-                                                                ToolTip="Candidato anterior" />
+                                                        <Button Width="32" Height="30" Command="{Binding PreviousCandidateCommand}"
+                                                                ToolTip="Candidato anterior"
+                                                                automation:AutomationProperties.Name="Histórico candidato anterior">
+                                                            <ui:SymbolIcon Symbol="ChevronLeft16" FontSize="16" />
+                                                        </Button>
                                                         <TextBlock Text="{Binding CandidatePositionText}" Margin="7,0"
                                                                    VerticalAlignment="Center" FontSize="11" />
-                                                        <Button Content="›" Width="32" Height="30" Command="{Binding NextCandidateCommand}"
-                                                                ToolTip="Candidato siguiente" />
+                                                        <Button Width="32" Height="30" Command="{Binding NextCandidateCommand}"
+                                                                ToolTip="Candidato siguiente"
+                                                                automation:AutomationProperties.Name="Histórico candidato siguiente">
+                                                            <ui:SymbolIcon Symbol="ChevronRight16" FontSize="16" />
+                                                        </Button>
                                                     </StackPanel>
                                                 </Grid>
                                                 <controls:RichContentViewer RichContent="{Binding MeasuresContent}">
@@ -1271,16 +1329,6 @@
                                                    Visibility="{Binding HasSourceOpenError, Converter={StaticResource BooleanVisibility}}" />
                                     </StackPanel>
                                 </ScrollViewer>
-                                <Grid x:Name="DetailNavigation" Grid.Row="3" Margin="16,8,16,12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Button Content="Anterior" Command="{Binding PreviousStudentCommand}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding PositionText}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    <Button Grid.Column="2" Content="Siguiente" Command="{Binding NextStudentCommand}" />
-                                </Grid>
                             </Grid>
                         </Border>
                     </Grid>
@@ -1290,16 +1338,13 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Button Content="Volver a archivos" Command="{Binding BackToFilesCommand}" />
                         <TextBlock Grid.Column="1" Text="{Binding ReviewReadinessMessage}"
                                    HorizontalAlignment="Right" VerticalAlignment="Center"
                                    MaxWidth="240" Margin="12,0" TextAlignment="Right"
                                    Style="{StaticResource MutedText}" FontSize="12" />
-                        <Button Grid.Column="2" Content="Ver todas las incidencias" Margin="8,0"
-                                Command="{Binding ShowAllIssuesCommand}" />
-                        <Button Grid.Column="3" Content="Configurar documentos" Style="{StaticResource PrimaryActionButton}"
+                        <Button Grid.Column="2" Content="Configurar documentos" Style="{StaticResource PrimaryActionButton}"
                                 ToolTip="Continuar para configurar las cabeceras y la ubicación de salida"
                                 automation:AutomationProperties.HelpText="No genera archivos; abre la configuración de salida"
                                 Command="{Binding ContinueToGenerationCommand}" />

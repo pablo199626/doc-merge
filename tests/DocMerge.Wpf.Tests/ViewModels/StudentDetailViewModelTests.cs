@@ -104,6 +104,20 @@ public sealed class StudentDetailViewModelTests
     }
 
     [Fact]
+    public void Open_FilteredResults_LabelsContextAndDisablesNavigationForSingleResult()
+    {
+        var viewModel = new StudentDetailViewModel(new StubSourceDocumentService());
+        var candidate = Candidate("single.docx", "MEDIDA");
+        var student = Student("ALUMNO, ÚNICO", "10000001", HistoricalResolutionType.Found, [candidate], candidate);
+
+        viewModel.Open(student, [student], StudentNavigationContext.FilteredResults);
+
+        Assert.Equal("1 de 1 resultado", viewModel.PositionText);
+        Assert.False(viewModel.PreviousStudentCommand.CanExecute(parameter: null));
+        Assert.False(viewModel.NextStudentCommand.CanExecute(parameter: null));
+    }
+
+    [Fact]
     public void OpenSourceCommand_ValidSource_DelegatesExactPath()
     {
         var sourceService = new StubSourceDocumentService();

@@ -1,8 +1,12 @@
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -68,6 +72,7 @@ public sealed partial class MainWindowViewModelTests
             await viewModel.AnalyzeCommand.ExecuteAsync();
             Assert.True(viewModel.VisibleStudents.Count > 0, $"{viewModel.WorkflowState}: {viewModel.GeneralError}; class={viewModel.SelectedClass?.Code}; filter={viewModel.SelectedFilter}");
             await VerifyDockedWidthAsync(window, 1920, "wide-light");
+            await VerifyFilteredNavigationAndEscapeAsync(window, viewModel);
             await VerifyDockedWidthAsync(window, 1366, "medium-light");
             viewModel.OpenStudentDetailCommand.Execute(viewModel.VisibleStudents[1]);
             await SettleLayoutAsync(window);
@@ -137,8 +142,7 @@ public sealed partial class MainWindowViewModelTests
             Assert.True(((Button)window.FindName("BackToStudentListButton")).IsVisible);
             VerifyDetailScroll(window);
             CaptureLayout(window, captureName);
-            viewModel.StudentDetail.Close();
-            await SettleLayoutAsync(window);
+            await CloseVisibleDetailAsync(window, viewModel);
             Assert.True(students.IsVisible);
             return;
         }
@@ -154,9 +158,13 @@ public sealed partial class MainWindowViewModelTests
         Assert.InRange(detail.ActualHeight, students.ActualHeight - 1, students.ActualHeight + 1);
         Assert.Equal(new CornerRadius(12), detail.CornerRadius);
         VerifyClassViewport(window);
+        VerifyClassBadges(window);
+        VerifyIssueAccess(window);
+        VerifyStudentNavigation(window, "1 de 7", canNavigatePrevious: false, canNavigateNext: true);
         viewModel.OpenStudentDetailCommand.Execute(viewModel.VisibleStudents[1]);
         await SettleLayoutAsync(window);
         Assert.True(detail.IsVisible);
+        VerifyStudentNavigation(window, "2 de 7", canNavigatePrevious: true, canNavigateNext: true);
         var status = (TextBlock)window.FindName("DetailStatusText");
         Assert.Equal(((SolidColorBrush)window.FindResource("ErrorBrush")).Color, ((SolidColorBrush)status.Foreground).Color);
         foreach (var rowStatus in VisualChildren<TextBlock>((DataGrid)window.FindName("ReviewGrid"))
@@ -175,8 +183,7 @@ public sealed partial class MainWindowViewModelTests
         ((ScrollViewer)window.FindName("DetailBodyScroll")).ScrollToEnd();
         await SettleLayoutAsync(window);
         CaptureLayout(window, captureName + "-bottom");
-        viewModel.StudentDetail.Close();
-        await SettleLayoutAsync(window);
+        await CloseVisibleDetailAsync(window, viewModel);
         Assert.InRange(students.ActualWidth, closedWidth - 1, closedWidth + 1);
     }
 
@@ -194,17 +201,109 @@ public sealed partial class MainWindowViewModelTests
         Assert.True(item.ActualWidth <= scroll.ViewportWidth);
     }
 
+    private static void VerifyClassBadges(MainWindow window)
+    {
+        var list = (ListBox)window.FindName("ClassesList");
+        if (!list.IsVisible)
+        {
+            return;
+        }
+
+        var item = (ListBoxItem)list.ItemContainerGenerator.ContainerFromIndex(0);
+        var names = VisualChildren<Button>(item)
+            .Select(AutomationProperties.GetName)
+            .Where(name => name.Contains("alumno", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        Assert.Equal(
+            ["2 alumnos encontrados", "1 alumno nuevo", "4 alumnos en conflicto"],
+            names.Take(3));
+    }
+
+    private static void VerifyStudentNavigation(
+        MainWindow window,
+        string expectedPosition,
+        bool canNavigatePrevious,
+        bool canNavigateNext)
+    {
+        var detail = (Border)window.FindName("StudentDetailPanel");
+        var viewModel = (DocMerge.Wpf.ViewModels.MainWindowViewModel)window.DataContext;
+        var previous = Assert.Single(VisualChildren<Button>(detail), button =>
+            ReferenceEquals(button.Command, viewModel.StudentDetail.PreviousStudentCommand));
+        var next = Assert.Single(VisualChildren<Button>(detail), button =>
+            ReferenceEquals(button.Command, viewModel.StudentDetail.NextStudentCommand));
+        Assert.Equal(canNavigatePrevious, previous.IsEnabled);
+        Assert.Equal(canNavigateNext, next.IsEnabled);
+        Assert.InRange(previous.ActualWidth, 39, 41);
+        Assert.InRange(next.ActualWidth, 39, 41);
+        Assert.Equal(expectedPosition, ((TextBlock)window.FindName("StudentPositionText")).Text);
+        Assert.Single(VisualChildren<Button>(detail), button =>
+            ReferenceEquals(button.Command, viewModel.StudentDetail.CloseCommand) && button.IsVisible);
+        Assert.DoesNotContain(VisualChildren<Button>(detail), button =>
+            Equals(button.Content, "Anterior") || Equals(button.Content, "Siguiente"));
+    }
+
+    private static void VerifyIssueAccess(MainWindow window)
+    {
+        var visibleButtons = VisualChildren<Button>(window).Where(button => button.IsVisible).ToArray();
+        Assert.DoesNotContain(visibleButtons, button => Equals(button.Content, "Ver todas las incidencias"));
+        Assert.Contains(visibleButtons, button => Equals(button.Content, "Consultar incidencias del lote"));
+    }
+
+    private static async Task VerifyFilteredNavigationAndEscapeAsync(
+        MainWindow window,
+        DocMerge.Wpf.ViewModels.MainWindowViewModel viewModel)
+    {
+        viewModel.SelectedFilter = "Encontrado";
+        viewModel.OpenStudentDetailCommand.Execute(viewModel.VisibleStudents[0]);
+        await SettleLayoutAsync(window);
+        Assert.Equal("1 de 2 resultados", ((TextBlock)window.FindName("StudentPositionText")).Text);
+        CaptureLayout(window, "wide-filtered-light");
+
+        var keyEvent = new KeyEventArgs(
+            Keyboard.PrimaryDevice,
+            PresentationSource.FromVisual(window),
+            Environment.TickCount,
+            Key.Escape)
+        {
+            RoutedEvent = Keyboard.PreviewKeyDownEvent,
+        };
+        window.RaiseEvent(keyEvent);
+        await SettleLayoutAsync(window);
+
+        Assert.True(keyEvent.Handled);
+        Assert.False(viewModel.IsStudentDetailOpen);
+        Assert.True(((DataGrid)window.FindName("ReviewGrid")).IsKeyboardFocusWithin);
+        viewModel.ClearReviewFiltersCommand.Execute(parameter: null);
+    }
+
+    private static async Task CloseVisibleDetailAsync(
+        MainWindow window,
+        DocMerge.Wpf.ViewModels.MainWindowViewModel viewModel)
+    {
+        var detail = (Border)window.FindName("StudentDetailPanel");
+        var close = Assert.Single(VisualChildren<Button>(detail), button =>
+            ReferenceEquals(button.Command, viewModel.StudentDetail.CloseCommand) && button.IsVisible);
+        var peer = new ButtonAutomationPeer(close);
+        var invoker = Assert.IsAssignableFrom<IInvokeProvider>(peer.GetPattern(PatternInterface.Invoke));
+        invoker.Invoke();
+        await SettleLayoutAsync(window);
+
+        Assert.False(viewModel.IsStudentDetailOpen);
+        Assert.True(((DataGrid)window.FindName("ReviewGrid")).IsKeyboardFocusWithin);
+    }
+
     private static void VerifyDetailScroll(MainWindow window)
     {
         var scroll = (ScrollViewer)window.FindName("DetailBodyScroll");
         var body = (StackPanel)window.FindName("DetailBodyContent");
-        var navigation = (Grid)window.FindName("DetailNavigation");
+        var detail = (Border)window.FindName("StudentDetailPanel");
         Assert.True(scroll.ActualHeight >= 80, "The fixed sections must leave a readable scrolling viewport.");
         var bar = VisualChildren<ScrollBar>(scroll).First(item => item.Orientation == Orientation.Vertical && item.IsVisible);
         var barPosition = bar.TranslatePoint(new Point(), scroll);
         var bodyPosition = body.TranslatePoint(new Point(), scroll);
         Assert.True(bodyPosition.X + body.ActualWidth + 8 <= barPosition.X);
-        Assert.True(scroll.TranslatePoint(new Point(0, scroll.ActualHeight), window).Y <= navigation.TranslatePoint(new Point(), window).Y);
+        var scrollBottom = scroll.TranslatePoint(new Point(0, scroll.ActualHeight), detail).Y;
+        Assert.InRange(scrollBottom, detail.ActualHeight - 14, detail.ActualHeight);
         Assert.True(scroll.ScrollableHeight > 0);
         scroll.ScrollToEnd();
         window.UpdateLayout();
