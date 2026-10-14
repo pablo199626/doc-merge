@@ -15,30 +15,16 @@ public sealed class HistoricalStudentResolver
         if (candidates.Count == 0)
         {
             return new HistoricalResolution(
-                HistoricalResolutionType.MissingHistoricalStudent, candidates, null);
+                HistoricalResolutionType.NewStudent, candidates, null);
         }
 
         if (candidates.Count == 1)
         {
             return new HistoricalResolution(
-                HistoricalResolutionType.UniqueMatch, candidates, candidates[0]);
-        }
-
-        if (HaveEquivalentInformation(candidates))
-        {
-            return new HistoricalResolution(
-                HistoricalResolutionType.EquivalentMatches, candidates, candidates[0]);
+                HistoricalResolutionType.Found, candidates, candidates[0]);
         }
 
         return new HistoricalResolution(
-            HistoricalResolutionType.ConflictingHistoricalData, candidates, null);
-    }
-
-    private static bool HaveEquivalentInformation(
-        IReadOnlyList<HistoricalStudentCandidate> candidates)
-    {
-        var signature = candidates[0].InformationSignature;
-        return signature.Length > 0 && candidates.All(candidate => string.Equals(
-            candidate.InformationSignature, signature, StringComparison.Ordinal));
+            HistoricalResolutionType.Conflict, candidates, null);
     }
 }

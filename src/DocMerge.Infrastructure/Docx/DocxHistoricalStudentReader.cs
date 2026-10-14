@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using DocMerge.Application.Documents;
@@ -24,7 +22,6 @@ public sealed class DocxHistoricalStudentReader : IHistoricalStudentReader
             var candidates = document.Records.Select(record => new HistoricalStudentCandidate(
                 record,
                 StudentNameMatchKey.Create(record.OriginalName),
-                CreateInformationSignature(record, document.NameColumnIndex, package),
                 CreateReviewFields(record, document.NameColumnIndex, headers))).ToArray();
             return new HistoricalDocumentSnapshot(path, document.Sha256, headers, candidates);
         }
@@ -54,32 +51,6 @@ public sealed class DocxHistoricalStudentReader : IHistoricalStudentReader
             IdentityNormalizer.NormalizeWhitespace(DocxXml.ElementText(cell))).ToArray();
     }
 
-    private static string CreateInformationSignature(
-        Domain.Documents.DocumentRecord record,
-        int nameColumnIndex,
-        DocxPackage package)
-    {
-        var row = XElement.Parse(record.RowXml, LoadOptions.PreserveWhitespace);
-        var cells = DocxXml.RowCells(row);
-        cells[nameColumnIndex].ReplaceWith(new XElement(DocxNames.Word + "tc"));
-        var signature = new StringBuilder(row.ToString(SaveOptions.DisableFormatting));
-        AppendPartHash(signature, package, DocxNames.StylesPart);
-        AppendPartHash(signature, package, DocxNames.NumberingPart);
-        foreach (var relationship in record.Dependencies.Relationships
-            .OrderBy(item => item.RelationshipId, StringComparer.Ordinal))
-        {
-            signature.Append('|').Append(relationship.RelationshipType)
-                .Append('|').Append(relationship.IsExternal)
-                .Append('|').Append(relationship.Target);
-            if (!relationship.IsExternal)
-            {
-                AppendPartHash(signature, package, relationship.Target);
-            }
-        }
-
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(signature.ToString())));
-    }
-
     private static IReadOnlyList<HistoricalInformationField> CreateReviewFields(
         Domain.Documents.DocumentRecord record,
         int nameColumnIndex,
@@ -102,15 +73,4 @@ public sealed class DocxHistoricalStudentReader : IHistoricalStudentReader
             element.Name.LocalName is "drawing" or "object" or "pict");
     }
 
-    private static void AppendPartHash(
-        StringBuilder signature,
-        DocxPackage package,
-        string partName)
-    {
-        if (package.Parts.TryGetValue(partName, out var content))
-        {
-            signature.Append('|').Append(partName).Append(':')
-                .Append(Convert.ToHexStringLower(SHA256.HashData(content)));
-        }
-    }
 }

@@ -49,6 +49,12 @@ public sealed class ClassGenerationExecutionService
                 "El plan contiene incidencias estructurales que impiden publicar el lote.");
         }
 
+        if (prepared.Plan.OutputClasses.Count == 0)
+        {
+            throw new OperationValidationException(
+                "No hay alumnos sin conflicto para generar documentos.");
+        }
+
         progress?.Report(new ClassGenerationProgress(ClassGenerationStage.VerifyingInputs));
         await VerifyInputsAsync(prepared, cancellationToken);
         var temporary = _publisher.CreateTemporaryDirectory(request.OutputDirectory);

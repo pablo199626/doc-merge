@@ -16,10 +16,11 @@ public static class ClassGenerationPlanFormatter
                 .ToDictionary(group => group.Key, group => group.Count());
             lines.Add(
                 $"- {classPlan.Roster.ClassIdentifier.CanonicalCode}: " +
-                $"alumnos={classPlan.Rows.Count}, " +
-                $"recuperados={CountRecovered(counts)}, " +
-                $"sin_histórico={Count(counts, HistoricalResolutionType.MissingHistoricalStudent)}, " +
-                $"conflictos={CountUnresolved(counts)}");
+                $"listado={classPlan.Rows.Count}, " +
+                $"encontrados={Count(counts, HistoricalResolutionType.Found)}, " +
+                $"nuevos={Count(counts, HistoricalResolutionType.NewStudent)}, " +
+                $"conflictos_omitidos={Count(counts, HistoricalResolutionType.Conflict)}, " +
+                $"documento={(classPlan.ProducesDocument ? "sí" : "no")}");
         }
 
         lines.AddRange(FormatIssues(plan.Issues));
@@ -37,20 +38,6 @@ public static class ClassGenerationPlanFormatter
             .Concat(issues.Select(issue =>
                 $"- [{issue.Code}] {issue.StudentName ?? issue.ClassIdentifier?.CanonicalCode}: " +
                 issue.Detail));
-    }
-
-    private static int CountRecovered(
-        IReadOnlyDictionary<HistoricalResolutionType, int> counts)
-    {
-        return Count(counts, HistoricalResolutionType.UniqueMatch)
-            + Count(counts, HistoricalResolutionType.EquivalentMatches);
-    }
-
-    private static int CountUnresolved(
-        IReadOnlyDictionary<HistoricalResolutionType, int> counts)
-    {
-        return Count(counts, HistoricalResolutionType.ConflictingHistoricalData)
-            + Count(counts, HistoricalResolutionType.AmbiguousStudentIdentity);
     }
 
     private static int Count(

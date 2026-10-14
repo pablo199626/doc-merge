@@ -6,10 +6,10 @@ namespace DocMerge.Domain.Tests.Generation;
 public sealed class ClassGenerationPlannerTests
 {
     [Fact]
-    public void Create_UniqueAndMissingStudents_PlansBothRowsAndReportsMissingStudent()
+    public void Create_FoundAndNewStudents_PlansBothRowsWithoutIssues()
     {
         var roster = Roster("A", Entry("11111111", "ALUMNO, UNO"), Entry("22222222", "ALUMNO, DOS"));
-        var candidate = Candidate("history.docx", "alumno uno", "DATA");
+        var candidate = Candidate("history.docx", "alumno uno");
         var planner = new ClassGenerationPlanner(new HistoricalStudentResolver());
 
         var result = planner.Create([roster], new HistoricalStudentIndex([candidate]));
@@ -17,34 +17,102 @@ public sealed class ClassGenerationPlannerTests
         Assert.False(result.HasBlockingIssues);
         Assert.Collection(
             result.Classes[0].Rows,
-            row => Assert.Equal(HistoricalResolutionType.UniqueMatch, row.Resolution.ResolutionType),
+            row => Assert.Equal(HistoricalResolutionType.Found, row.Resolution.ResolutionType),
             row => Assert.Equal(
-                HistoricalResolutionType.MissingHistoricalStudent,
+                HistoricalResolutionType.NewStudent,
                 row.Resolution.ResolutionType));
-        Assert.Contains(result.Issues, issue => issue.Code == "MissingHistoricalStudent");
-        Assert.Contains(result.Issues, issue => issue.Code == "PdfWithoutDeclaredTotal");
+        Assert.Empty(result.Issues);
     }
 
     [Fact]
-    public void Create_SameNameWithDifferentStudentNumbers_BlocksHistoricalAssociation()
+    public void Create_SameNameWithDifferentStudentNumbers_CreatesConflictBeforeHistoricalResolution()
     {
         var first = Roster("A", Entry("11111111", "BENALI, OMAR"));
         var second = Roster("B", Entry("22222222", "BENALI OMAR"));
-        var candidate = Candidate("history.docx", "benali omar", "DATA");
+        var candidates = new[]
+        {
+            Candidate("history.docx", "benali omar"),
+            Candidate("history-copy.docx", "benali omar"),
+        };
         var planner = new ClassGenerationPlanner(new HistoricalStudentResolver());
 
-        var result = planner.Create([first, second], new HistoricalStudentIndex([candidate]));
+        var result = planner.Create([first, second], new HistoricalStudentIndex(candidates));
 
         Assert.False(result.HasBlockingIssues);
         Assert.All(
             result.Classes.SelectMany(plan => plan.Rows),
             row => Assert.Equal(
-                HistoricalResolutionType.AmbiguousStudentIdentity,
+                HistoricalResolutionType.Conflict,
                 row.Resolution.ResolutionType));
-        Assert.Equal(2, result.Issues.Count(issue => issue.Code == "AmbiguousStudentIdentity"));
+        Assert.Equal(2, result.Issues.Count(issue => issue.Code == "DuplicateStudentName"));
         Assert.All(
-            result.Issues.Where(issue => issue.Code == "AmbiguousStudentIdentity"),
-            issue => Assert.Equal(GenerationIssueSeverity.Warning, issue.Severity));
+            result.Issues.Where(issue => issue.Code == "DuplicateStudentName"),
+            issue =>
+            {
+                Assert.Equal(GenerationIssueSeverity.Warning, issue.Severity);
+                Assert.Contains("distintos NIA", issue.Detail, StringComparison.Ordinal);
+            });
+    }
+
+    [Fact]
+    public void Create_DuplicateHistoricalRowsInSameDocument_OmitsStudentAndReportsConflict()
+    {
+        var roster = Roster("A", Entry("11111111", "ALUMNO, UNO"));
+        var candidates = new[]
+        {
+            Candidate("history.docx", "alumno uno", rowIndex: 1),
+            Candidate("history.docx", "alumno uno", rowIndex: 2),
+        };
+        var planner = new ClassGenerationPlanner(new HistoricalStudentResolver());
+
+        var result = planner.Create([roster], new HistoricalStudentIndex(candidates));
+
+        var classPlan = Assert.Single(result.Classes);
+        Assert.Equal(HistoricalResolutionType.Conflict, Assert.Single(classPlan.Rows).Resolution.ResolutionType);
+        Assert.False(classPlan.Rows[0].IsIncluded);
+        Assert.Empty(classPlan.IncludedRows);
+        Assert.False(classPlan.ProducesDocument);
+        Assert.Empty(result.OutputClasses);
+        Assert.Equal(1, result.OmittedStudentCount);
+        Assert.Contains(result.Issues, issue => issue.Code == "DuplicateStudentName");
+    }
+
+    [Fact]
+    public void Create_OneEmptyAndOneIncludedClass_PlansOnlyIncludedDocument()
+    {
+        var conflicted = Roster("A", Entry("11111111", "ALUMNO, UNO"));
+        var newStudent = Roster("B", Entry("22222222", "ALUMNO, DOS"));
+        var candidates = new[]
+        {
+            Candidate("first.docx", "alumno uno"),
+            Candidate("second.docx", "alumno uno"),
+        };
+        var planner = new ClassGenerationPlanner(new HistoricalStudentResolver());
+
+        var result = planner.Create([conflicted, newStudent], new HistoricalStudentIndex(candidates));
+
+        var output = Assert.Single(result.OutputClasses);
+        Assert.Equal("2ESOB", output.Roster.ClassIdentifier.CanonicalCode);
+        Assert.Equal(2, result.RosterStudentCount);
+        Assert.Equal(1, result.IncludedStudentCount);
+        Assert.Equal(1, result.OmittedStudentCount);
+    }
+
+    [Fact]
+    public void Create_DuplicateHistoryWithoutRosterAssignment_DoesNotReportConflict()
+    {
+        var roster = Roster("A", Entry("11111111", "ALUMNO, UNO"));
+        var candidates = new[]
+        {
+            Candidate("first.docx", "alumno ausente"),
+            Candidate("second.docx", "alumno ausente"),
+        };
+        var planner = new ClassGenerationPlanner(new HistoricalStudentResolver());
+
+        var result = planner.Create([roster], new HistoricalStudentIndex(candidates));
+
+        Assert.Empty(result.Issues);
+        Assert.Equal(HistoricalResolutionType.NewStudent, Assert.Single(result.Classes[0].Rows).Resolution.ResolutionType);
     }
 
     [Fact]
@@ -99,16 +167,16 @@ public sealed class ClassGenerationPlannerTests
     private static HistoricalStudentCandidate Candidate(
         string path,
         string matchKey,
-        string signature)
+        int rowIndex = 1)
     {
         var record = new DocumentRecord(
             path,
             0,
-            1,
+            rowIndex,
             matchKey,
             matchKey,
             "<row />",
             new RecordDependencies([], [], []));
-        return new HistoricalStudentCandidate(record, matchKey, signature);
+        return new HistoricalStudentCandidate(record, matchKey);
     }
 }

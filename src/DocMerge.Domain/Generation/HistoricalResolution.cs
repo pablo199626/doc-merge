@@ -13,8 +13,9 @@ public sealed record HistoricalResolution
         HistoricalStudentCandidate? selectedCandidate)
     {
         ArgumentNullException.ThrowIfNull(candidates);
-        ResolutionType = resolutionType;
         Candidates = Array.AsReadOnly(candidates.ToArray());
+        Validate(resolutionType, Candidates, selectedCandidate);
+        ResolutionType = resolutionType;
         SelectedCandidate = selectedCandidate;
     }
 
@@ -26,4 +27,23 @@ public sealed record HistoricalResolution
 
     /// <summary>Gets the representative candidate when the resolution is safe.</summary>
     public HistoricalStudentCandidate? SelectedCandidate { get; }
+
+    private static void Validate(
+        HistoricalResolutionType resolutionType,
+        IReadOnlyList<HistoricalStudentCandidate> candidates,
+        HistoricalStudentCandidate? selectedCandidate)
+    {
+        var isValid = resolutionType switch
+        {
+            HistoricalResolutionType.Found => candidates.Count == 1
+                && ReferenceEquals(candidates[0], selectedCandidate),
+            HistoricalResolutionType.NewStudent => candidates.Count == 0 && selectedCandidate is null,
+            HistoricalResolutionType.Conflict => selectedCandidate is null,
+            _ => false,
+        };
+        if (!isValid)
+        {
+            throw new ArgumentException("La resolución histórica no cumple las invariantes de su estado.");
+        }
+    }
 }

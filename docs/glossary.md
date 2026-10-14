@@ -26,3 +26,6 @@
 | opciones editables de salida | `ClassGenerationOutputOptions` |
 | lote preparado o revisión | `PreparedClassGeneration` |
 | carpeta nueva de salida | `OutputDirectory` |
+| encontrado | `HistoricalResolutionType.Found` |
+| alumno nuevo | `HistoricalResolutionType.NewStudent` |
+| conflicto de alumno | `HistoricalResolutionType.Conflict` |

@@ -4,17 +4,11 @@ namespace DocMerge.Domain.Generation;
 public enum HistoricalResolutionType
 {
     /// <summary>Exactly one historical candidate was found.</summary>
-    UniqueMatch,
+    Found,
 
-    /// <summary>Multiple candidates with demonstrably identical information were found.</summary>
-    EquivalentMatches,
+    /// <summary>No historical candidate was found, so the student is new.</summary>
+    NewStudent,
 
-    /// <summary>No historical candidate was found.</summary>
-    MissingHistoricalStudent,
-
-    /// <summary>Multiple candidates contain different or non-demonstrably-equivalent information.</summary>
-    ConflictingHistoricalData,
-
-    /// <summary>The PDF assignments do not permit a safe name-only association.</summary>
-    AmbiguousStudentIdentity,
+    /// <summary>Historical or PDF data does not permit a unique name-based association.</summary>
+    Conflict,
 }

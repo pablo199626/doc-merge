@@ -38,11 +38,12 @@ public sealed class ClassGenerationPlanner
         var rows = new List<StudentRowPlan>(roster.Entries.Count);
         foreach (var entry in roster.Entries)
         {
-            var resolution = ambiguousNames.Contains(entry.MatchKey)
+            var hasAmbiguousPdfIdentity = ambiguousNames.Contains(entry.MatchKey);
+            var resolution = hasAmbiguousPdfIdentity
                 ? CreateAmbiguousResolution(entry, index)
                 : _resolver.Resolve(entry.MatchKey, index);
             rows.Add(new StudentRowPlan(entry, resolution));
-            AddResolutionIssue(roster, entry, resolution, issues);
+            AddResolutionIssue(roster, entry, resolution, hasAmbiguousPdfIdentity, issues);
         }
 
         return new ClassDocumentPlan(roster, rows);
@@ -53,7 +54,7 @@ public sealed class ClassGenerationPlanner
         HistoricalStudentIndex index)
     {
         return new HistoricalResolution(
-            HistoricalResolutionType.AmbiguousStudentIdentity,
+            HistoricalResolutionType.Conflict,
             index.Find(entry.MatchKey),
             null);
     }
@@ -74,18 +75,6 @@ public sealed class ClassGenerationPlanner
                     "documento completo",
                     roster.ClassIdentifier)).ToArray()))
             .ToList();
-        issues.AddRange(rosters.Where(roster => !roster.HasDeclaredTotal)
-            .Select(roster => new GenerationIssue(
-                "PdfWithoutDeclaredTotal",
-                GenerationIssueSeverity.Warning,
-                roster.ClassIdentifier,
-                null,
-                "El PDF no declara un total independiente; se aplicó validación estructural estricta.",
-                [roster.SourcePath],
-                [new GenerationIssueReference(
-                    roster.SourcePath,
-                    "documento completo",
-                    roster.ClassIdentifier)])));
         issues.AddRange(FindDuplicateStudentNumberIssues(rosters));
         return issues;
     }
@@ -125,26 +114,17 @@ public sealed class ClassGenerationPlanner
         ClassRoster roster,
         ClassRosterEntry entry,
         HistoricalResolution resolution,
+        bool hasAmbiguousPdfIdentity,
         ICollection<GenerationIssue> issues)
     {
         var issue = resolution.ResolutionType switch
         {
-            HistoricalResolutionType.UniqueMatch => null,
-            HistoricalResolutionType.EquivalentMatches => CreateResolutionIssue(
-                "EquivalentHistoricalRecords", GenerationIssueSeverity.Warning,
-                "Varios registros históricos equivalentes se consolidarán.",
-                roster, entry, resolution),
-            HistoricalResolutionType.MissingHistoricalStudent => CreateResolutionIssue(
-                "MissingHistoricalStudent", GenerationIssueSeverity.Warning,
-                "El alumno no aparece en los documentos históricos.",
-                roster, entry, resolution),
-            HistoricalResolutionType.ConflictingHistoricalData => CreateResolutionIssue(
-                "ConflictingHistoricalData", GenerationIssueSeverity.Warning,
-                "Los documentos históricos contienen información contradictoria.",
-                roster, entry, resolution),
-            HistoricalResolutionType.AmbiguousStudentIdentity => CreateResolutionIssue(
-                "AmbiguousStudentIdentity", GenerationIssueSeverity.Warning,
-                "El mismo nombre corresponde a distintos NIA en los PDF.",
+            HistoricalResolutionType.Found or HistoricalResolutionType.NewStudent => null,
+            HistoricalResolutionType.Conflict => CreateResolutionIssue(
+                "DuplicateStudentName", GenerationIssueSeverity.Warning,
+                hasAmbiguousPdfIdentity
+                    ? "El mismo nombre y apellidos corresponde a distintos NIA en los PDF."
+                    : "El nombre y apellidos aparece varias veces en los documentos históricos.",
                 roster, entry, resolution),
             _ => throw new InvalidOperationException("Resolución histórica no reconocida."),
         };

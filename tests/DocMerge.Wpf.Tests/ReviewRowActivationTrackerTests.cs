@@ -67,7 +67,7 @@ public sealed class ReviewRowActivationTrackerTests
             1,
             1);
         var resolution = new HistoricalResolution(
-            HistoricalResolutionType.MissingHistoricalStudent,
+            HistoricalResolutionType.NewStudent,
             [],
             selectedCandidate: null);
         return new StudentReviewViewModel(

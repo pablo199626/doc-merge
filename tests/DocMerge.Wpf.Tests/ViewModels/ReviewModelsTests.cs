@@ -6,11 +6,11 @@ namespace DocMerge.Wpf.Tests.ViewModels;
 public sealed class ReviewModelsTests
 {
     [Fact]
-    public void ClassReview_DuplicateAssignmentsAndIssues_CountsAffectedStudentOnce()
+    public void ClassReview_MixedStates_ReportsIncludedAndOmittedAssignments()
     {
         var classIdentifier = new ClassIdentifier("ESO", 2, "A");
-        var firstRow = MissingRow("ALUMNO, UNO", "12345678", ordinal: 1);
-        var secondRow = MissingRow("ALUMNO, UNO REPETIDO", "12345678", ordinal: 2);
+        var firstRow = NewStudentRow("ALUMNO, UNO", "12345678", ordinal: 1);
+        var secondRow = ConflictRow("ALUMNO, UNO REPETIDO", "87654321", ordinal: 2);
         var roster = new ClassRoster(
             "2ESOA.pdf",
             "hash",
@@ -18,42 +18,31 @@ public sealed class ReviewModelsTests
             [firstRow.RosterEntry, secondRow.RosterEntry],
             1,
             hasDeclaredTotal: false);
-        var studentIssue = Issue(
-            "MissingHistoricalStudent",
+        var conflictIssue = Issue(
+            "DuplicateStudentName",
             classIdentifier,
-            "12345678",
-            studentName: "ALUMNO, UNO");
-        var repeatedStudentIssue = Issue(
-            "MissingHistoricalStudent",
-            classIdentifier,
-            "12345678",
+            "87654321",
             studentName: "ALUMNO, UNO REPETIDO");
-        var documentIssue = Issue(
-            "PdfWithoutDeclaredTotal",
-            classIdentifier,
-            studentNumber: null,
-            studentName: null);
-        var issues = new[] { studentIssue, repeatedStudentIssue, documentIssue };
+        var issues = new[] { conflictIssue };
         var students = new[]
         {
-            new StudentReviewViewModel(classIdentifier, firstRow, [studentIssue, repeatedStudentIssue]),
-            new StudentReviewViewModel(classIdentifier, secondRow, [studentIssue, repeatedStudentIssue]),
+            new StudentReviewViewModel(classIdentifier, firstRow, []),
+            new StudentReviewViewModel(classIdentifier, secondRow, [conflictIssue]),
         };
         var review = new ClassReviewViewModel(new ClassDocumentPlan(roster, [firstRow, secondRow]), students, issues);
 
         Assert.Equal(2, review.StudentCount);
-        Assert.Equal(1, review.MissingCount);
-        Assert.Equal(1, review.DocumentWarningCount);
-        Assert.Equal(0, review.OtherWarningCount);
-        Assert.Equal("1 alumno sin histórico", review.MissingSummary);
-        Assert.Equal("1 aviso documental", review.DocumentWarningSummary);
+        Assert.Equal(1, review.NewStudentCount);
+        Assert.Equal(1, review.ConflictCount);
+        Assert.Equal(1, review.IncludedCount);
+        Assert.Equal("2 alumnos en el listado · 1 se incluirá · 1 omitido por conflicto", review.OutputSummary);
     }
 
     [Fact]
-    public void StudentDetail_UnresolvedStudent_ExplainsClassAndGeneratedResult()
+    public void StudentDetail_NewStudent_ExplainsClassAndGeneratedResult()
     {
         var classIdentifier = new ClassIdentifier("ESO", 2, "C");
-        var row = MissingRow("ALUMNO, SIN HISTÓRICO", "87654321", ordinal: 1);
+        var row = NewStudentRow("ALUMNO, NUEVO", "87654321", ordinal: 1);
         var student = new StudentReviewViewModel(classIdentifier, row, []);
 
         var detail = student.Detail;
@@ -63,7 +52,7 @@ public sealed class ReviewModelsTests
         Assert.Contains("las demás columnas quedarán vacías", detail);
     }
 
-    private static StudentRowPlan MissingRow(string name, string studentNumber, int ordinal)
+    private static StudentRowPlan NewStudentRow(string name, string studentNumber, int ordinal)
     {
         var entry = new ClassRosterEntry(
             name,
@@ -74,7 +63,21 @@ public sealed class ReviewModelsTests
             ordinal);
         return new StudentRowPlan(
             entry,
-            new HistoricalResolution(HistoricalResolutionType.MissingHistoricalStudent, [], selectedCandidate: null));
+            new HistoricalResolution(HistoricalResolutionType.NewStudent, [], selectedCandidate: null));
+    }
+
+    private static StudentRowPlan ConflictRow(string name, string studentNumber, int ordinal)
+    {
+        var entry = new ClassRosterEntry(
+            name,
+            name,
+            StudentNameMatchKey.Create(name),
+            studentNumber,
+            1,
+            ordinal);
+        return new StudentRowPlan(
+            entry,
+            new HistoricalResolution(HistoricalResolutionType.Conflict, [], selectedCandidate: null));
     }
 
     private static ReviewIssueViewModel Issue(

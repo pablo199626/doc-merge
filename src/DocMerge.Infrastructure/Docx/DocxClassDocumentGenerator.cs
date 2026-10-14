@@ -21,8 +21,9 @@ public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
             cancellationToken);
         var sources = await ReadSourcesAsync(
             request.Prepared.HistoricalDocuments, cancellationToken);
-        var generated = new List<GeneratedClassDocument>(request.Prepared.Plan.Classes.Count);
-        foreach (var classPlan in request.Prepared.Plan.Classes)
+        var outputClasses = request.Prepared.Plan.OutputClasses;
+        var generated = new List<GeneratedClassDocument>(outputClasses.Count);
+        foreach (var classPlan in outputClasses)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var outputPath = Path.Combine(
@@ -88,7 +89,7 @@ public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
     {
         var destination = DocxPackage.FromBytes(templateBytes);
         var prototype = XElement.Parse(template.PrototypeRowXml, LoadOptions.PreserveWhitespace);
-        var orderedPlans = classPlan.Rows.OrderBy(
+        var orderedPlans = classPlan.IncludedRows.OrderBy(
             row => sortingProfile.CreateKey(row.RosterEntry.OriginalName),
             SortKeyComparer.Instance).ToArray();
         var rows = BuildRows(
@@ -170,7 +171,7 @@ public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
 
         for (var index = 0; index < plans.Count; index++)
         {
-            output[index] ??= CreateUnresolvedRow(
+            output[index] ??= CreateNewStudentRow(
                 prototype, nameColumnIndex, plans[index].RosterEntry.OriginalName);
         }
 
@@ -216,7 +217,7 @@ public sealed class DocxClassDocumentGenerator : IClassDocumentGenerator
             .Select(element => new XElement(element)));
     }
 
-    private static XElement CreateUnresolvedRow(
+    private static XElement CreateNewStudentRow(
         XElement prototype,
         int nameColumnIndex,
         string name)

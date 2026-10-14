@@ -138,7 +138,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
 
     /// <summary>Gets a readable source without exposing an internal bundled-template path.</summary>
     public string DisplayLocation => IsBundled
-        ? "Incluida con Talos"
+        ? "Plantilla predeterminada"
         : Path
             ?? string.Empty;
 
@@ -164,7 +164,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         _displayNameOverride = displayName;
         _isBundled = true;
         Path = null;
-        Status = "Incluida con Talos · preparando copia segura…";
+        Status = "Plantilla · preparando copia segura…";
         Error = null;
         State = InputSelectionState.Analyzing;
         NotifyTemplateSourceChanged();
@@ -176,7 +176,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         _displayNameOverride = displayName;
         _isBundled = true;
         Path = System.IO.Path.GetFullPath(path);
-        Status = "Incluida con Talos · pendiente de analizar";
+        Status = "Plantilla · pendiente de analizar";
         Error = null;
         Count = null;
         State = InputSelectionState.Selected;
@@ -220,7 +220,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         }
 
         Status = IsBundled
-            ? "Incluida con Talos · pendiente de analizar"
+            ? "Plantilla · pendiente de analizar"
             : "Seleccionado · pendiente de analizar";
         State = InputSelectionState.Selected;
     }
