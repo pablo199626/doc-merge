@@ -36,4 +36,7 @@
     <SolidColorBrush x:Key="TemplateAccentBrush" Color="#7C3AED" />
     <SolidColorBrush x:Key="TemplateAccentSoftBrush" Color="#F0E8FF" />
     <SolidColorBrush x:Key="OverlayBrush" Color="#520B1220" />
+    <SolidColorBrush x:Key="DocumentPaperBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="DocumentInkBrush" Color="#111111" />
+    <SolidColorBrush x:Key="DocumentBorderBrush" Color="#D7CFC4" />
 </ResourceDictionary>

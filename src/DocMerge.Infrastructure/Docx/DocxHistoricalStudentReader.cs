@@ -19,10 +19,15 @@ public sealed class DocxHistoricalStudentReader : IHistoricalStudentReader
             var document = DocxDocumentReader.Parse(path, content, header);
             var package = DocxPackage.FromBytes(content);
             var headers = ReadHeaders(package, document);
+            var richContentReader = new DocxHistoricalRichContentReader(package);
             var candidates = document.Records.Select(record => new HistoricalStudentCandidate(
                 record,
                 StudentNameMatchKey.Create(record.OriginalName),
-                CreateReviewFields(record, document.NameColumnIndex, headers))).ToArray();
+                CreateReviewFields(
+                    record,
+                    document.NameColumnIndex,
+                    headers,
+                    richContentReader))).ToArray();
             return new HistoricalDocumentSnapshot(path, document.Sha256, headers, candidates);
         }
         catch (DocumentStructureException)
@@ -54,7 +59,8 @@ public sealed class DocxHistoricalStudentReader : IHistoricalStudentReader
     private static IReadOnlyList<HistoricalInformationField> CreateReviewFields(
         Domain.Documents.DocumentRecord record,
         int nameColumnIndex,
-        IReadOnlyList<string> headers)
+        IReadOnlyList<string> headers,
+        DocxHistoricalRichContentReader richContentReader)
     {
         var row = XElement.Parse(record.RowXml, LoadOptions.PreserveWhitespace);
         return DocxXml.RowCells(row)
@@ -63,7 +69,8 @@ public sealed class DocxHistoricalStudentReader : IHistoricalStudentReader
             .Select(item => new HistoricalInformationField(
                 headers[item.index],
                 DocxXml.ElementText(item.cell),
-                HasNonTextContent(item.cell)))
+                HasNonTextContent(item.cell),
+                richContentReader.Read(item.cell)))
             .ToArray();
     }
 

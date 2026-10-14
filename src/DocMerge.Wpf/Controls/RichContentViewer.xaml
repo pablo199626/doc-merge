@@ -1,0 +1,18 @@
+<UserControl x:Class="DocMerge.Wpf.Controls.RichContentViewer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False">
+    <Border Background="{DynamicResource DocumentPaperBrush}"
+            BorderBrush="{DynamicResource DocumentBorderBrush}"
+            BorderThickness="1" CornerRadius="8" Padding="12">
+        <FlowDocumentScrollViewer x:Name="Viewer"
+                                  Background="Transparent"
+                                  Foreground="{DynamicResource DocumentInkBrush}"
+                                  IsToolBarVisible="False"
+                                  IsSelectionEnabled="True"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  automation:AutomationProperties.Name="Vista previa de las medidas"
+                                  xmlns:automation="clr-namespace:System.Windows.Automation;assembly=PresentationCore" />
+    </Border>
+</UserControl>

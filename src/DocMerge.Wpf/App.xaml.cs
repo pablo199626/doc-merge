@@ -60,6 +60,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IThemeApplicator, WpfThemeApplicator>();
         services.AddSingleton<IThemeService, ThemeService>();
         services.AddSingleton<ISystemFolderService, SystemFolderService>();
+        services.AddSingleton<ISourceDocumentService, SourceDocumentService>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<MainWindow>();
         return services.BuildServiceProvider(new ServiceProviderOptions

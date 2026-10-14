@@ -12,13 +12,34 @@ public sealed record ReviewIssueViewModel(
 {
     /// <summary>Gets a readable severity.</summary>
     public string Severity => IsBlocking ? "Bloqueo" : "Aviso";
+
+    /// <summary>Gets structured document references suitable for review.</summary>
+    public IReadOnlyList<ReviewIssueSourceViewModel> Sources => Issue.SourceReferences.Count > 0
+        ? Issue.SourceReferences.Select(reference => new ReviewIssueSourceViewModel(
+            System.IO.Path.GetFileName(reference.SourcePath),
+            reference.SourcePath,
+            reference.Location)).ToArray()
+        : Issue.References.Select(reference => new ReviewIssueSourceViewModel(
+            reference,
+            string.Empty,
+            string.Empty)).ToArray();
 }
+
+/// <summary>Represents one traceable source reference attached to an issue.</summary>
+/// <param name="DisplayName">The source file name or fallback reference.</param>
+/// <param name="Path">The complete source path, when available.</param>
+/// <param name="Location">The readable location within the source.</param>
+public sealed record ReviewIssueSourceViewModel(
+    string DisplayName,
+    string Path,
+    string Location);
 
 /// <summary>Represents one student row in the review table.</summary>
 public sealed record StudentReviewViewModel(
     ClassIdentifier ClassIdentifier,
     StudentRowPlan Plan,
-    IReadOnlyList<ReviewIssueViewModel> Issues)
+    IReadOnlyList<ReviewIssueViewModel> Issues,
+    string RosterSourcePath = "")
 {
     /// <summary>Gets the PDF student name.</summary>
     public string Name => Plan.RosterEntry.OriginalName;
@@ -40,8 +61,6 @@ public sealed record StudentReviewViewModel(
         ? "—"
         : System.IO.Path.GetFileName(Plan.Resolution.SelectedCandidate.Record.DocumentPath);
 
-    /// <summary>Gets a readable detail of fields and candidates.</summary>
-    public string Detail => StudentReviewText.Create(ClassIdentifier, Plan, Issues);
 }
 
 /// <summary>Represents a traceable subset of issues for one class indicator.</summary>
@@ -139,62 +158,6 @@ public sealed record ClassReviewViewModel(
 
 internal static class StudentReviewText
 {
-    internal static string Create(
-        ClassIdentifier classIdentifier,
-        StudentRowPlan row,
-        IReadOnlyList<ReviewIssueViewModel> issues)
-    {
-        var lines = new List<string>
-        {
-            "IDENTIDAD DEL LISTADO",
-            $"Nombre en PDF: {row.RosterEntry.OriginalName}",
-            $"NIA: {row.RosterEntry.StudentNumber}",
-            $"Clase: {classIdentifier.CanonicalCode}",
-            string.Empty,
-            "RESOLUCIÓN",
-            $"Estado: {Status(row.Resolution.ResolutionType)}",
-            Consequence(row.Resolution.ResolutionType),
-        };
-        if (row.Resolution.Candidates.Count == 0)
-        {
-            lines.Add(string.Empty);
-            lines.Add("PROCEDENCIA");
-            lines.Add("No hay registros históricos candidatos.");
-        }
-
-        foreach (var candidate in row.Resolution.Candidates)
-        {
-            lines.Add(string.Empty);
-            lines.Add(row.Resolution.SelectedCandidate == candidate
-                ? "PROCEDENCIA SELECCIONADA"
-                : "CANDIDATO NO SELECCIONADO");
-            lines.Add($"Histórico: {candidate.Record.DocumentPath} ({candidate.Record.Location})");
-            lines.AddRange(candidate.ReviewFields.Select(field =>
-                $"{field.Header}: {field.Text}{(field.HasNonTextContent ? " [incluye contenido enriquecido]" : string.Empty)}"));
-        }
-
-        if (issues.Count > 0)
-        {
-            lines.Add(string.Empty);
-            lines.Add("INCIDENCIAS RELACIONADAS");
-            lines.AddRange(issues.Select(issue =>
-                $"• {issue.Title}: {issue.Issue.Detail} {issue.Consequence}"));
-        }
-
-        return string.Join(Environment.NewLine, lines);
-    }
-
-    private static string Consequence(HistoricalResolutionType type) => type switch
-    {
-        HistoricalResolutionType.Found =>
-            "Se copiará la información del histórico seleccionado al documento generado.",
-        HistoricalResolutionType.NewStudent =>
-            "Se escribirá el nombre del PDF; las demás columnas quedarán vacías.",
-        HistoricalResolutionType.Conflict =>
-            "El alumno se omitirá del documento generado hasta que el conflicto se resuelva manualmente.",
-        _ => throw new InvalidOperationException("Resolución histórica no reconocida."),
-    };
-
     internal static string Status(HistoricalResolutionType type) => type switch
     {
         HistoricalResolutionType.Found => "Encontrado",

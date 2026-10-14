@@ -87,6 +87,13 @@ internal static class DocxTestPackage
             StringComparer.Ordinal);
     }
 
+    internal static void ReplacePart(string path, string partName, string content)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        archive.GetEntry(partName)?.Delete();
+        Write(archive, partName, content);
+    }
+
     private static void Write(ZipArchive archive, string name, string content)
     {
         var entry = archive.CreateEntry(name);

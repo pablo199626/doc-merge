@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Reflection;
 using DocMerge.Application.Documents;
@@ -18,7 +19,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private const double CompactSidebarWidth = 64;
     private const double ExpandedSidebarWidth = 220;
     private const double SidebarOverlayThreshold = 900;
-    private const double CompactReviewThreshold = 1160;
+    private const double CompactReviewThreshold = 1240;
     private const string AllStatusesFilter = "Todos los estados";
     private const string FoundFilter = "Encontrado";
     private const string NewStudentFilter = "Alumno nuevo";
@@ -49,6 +50,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private string? _generalError;
     private string _progressText = string.Empty;
     private ClassReviewViewModel? _selectedClass;
+    private StudentReviewViewModel? _selectedStudent;
     private string _searchText = string.Empty;
     private string _selectedFilter = AllStatusesFilter;
     private string? _outputParent;
@@ -66,7 +68,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         IThemeService themeService,
         IDesktopPreferencesService preferences,
         ISystemFolderService folderService,
-        IBundledGenerationTemplateProvider? bundledTemplateProvider = null)
+        IBundledGenerationTemplateProvider? bundledTemplateProvider = null,
+        ISourceDocumentService? sourceDocumentService = null)
     {
         _preparationService = preparationService ?? throw new ArgumentNullException(nameof(preparationService));
         _executionService = executionService ?? throw new ArgumentNullException(nameof(executionService));
@@ -75,6 +78,10 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _folderService = folderService ?? throw new ArgumentNullException(nameof(folderService));
         _bundledTemplateProvider = bundledTemplateProvider;
+        StudentDetail = new StudentDetailViewModel(
+            sourceDocumentService ?? new SourceDocumentService());
+        StudentDetail.PropertyChanged += OnStudentDetailPropertyChanged;
+        StudentDetail.StudentChanged += OnDetailStudentChanged;
         _synchronizationContext = SynchronizationContext.Current;
         _isDark = themeService.IsDark;
         _selectedThemePreference = themeService.Preference;
@@ -121,7 +128,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         ShowIssueCommand = new RelayCommand(ShowIssue);
         ShowAllIssuesCommand = new RelayCommand(_ => ShowAllIssues(), _ => Issues.Count > 0);
         ShowIssueGroupCommand = new RelayCommand(ShowIssueGroup);
-        ShowStudentCommand = new RelayCommand(ShowStudent);
+        OpenStudentDetailCommand = new RelayCommand(OpenStudentDetail);
         FilterByStatusCommand = new RelayCommand(FilterByStatus);
         ClearReviewFiltersCommand = new RelayCommand(_ => ClearReviewFilters(), _ => HasActiveReviewFilters);
         SetThemeCommand = new RelayCommand(SetTheme);
@@ -129,8 +136,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         CloseSidebarOverlayCommand = new RelayCommand(_ => IsSidebarExpanded = false);
     }
 
-    /// <summary>Raised when a temporary read-only detail dialog should be displayed.</summary>
-    public event EventHandler<DetailRequestedEventArgs>? DetailRequested;
+    /// <summary>Raised when a temporary read-only issue dialog should be displayed.</summary>
+    public event EventHandler<IssueDetailRequestedEventArgs>? IssueDetailRequested;
 
     /// <summary>Gets the historical input card.</summary>
     public InputSelectionViewModel HistoricalInput { get; }
@@ -152,6 +159,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     /// <summary>Gets document-header values for every class in the reviewed batch.</summary>
     public ObservableCollection<ClassHeaderViewModel> ClassHeaders { get; } = [];
+
+    /// <summary>Gets the integrated student-detail state.</summary>
+    public StudentDetailViewModel StudentDetail { get; }
 
     /// <summary>Gets available review filters.</summary>
     public IReadOnlyList<string> StatusFilters { get; } =
@@ -207,8 +217,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Gets the command that shows one traceable class-issue subset.</summary>
     public RelayCommand ShowIssueGroupCommand { get; }
 
-    /// <summary>Gets the command that shows student detail.</summary>
-    public RelayCommand ShowStudentCommand { get; }
+    /// <summary>Gets the command that opens integrated student detail.</summary>
+    public RelayCommand OpenStudentDetailCommand { get; }
 
     /// <summary>Gets the command that activates a review-only status filter.</summary>
     public RelayCommand FilterByStatusCommand { get; }
@@ -414,7 +424,10 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsSidebarOverlayVisible => IsSidebarExpanded && IsSidebarOverlayMode;
 
     /// <summary>Gets whether review uses its vertically stacked class selector.</summary>
-    public bool IsCompactReviewLayout => _windowWidth - SidebarColumnWidth < CompactReviewThreshold;
+    public bool IsCompactReviewLayout => AvailableReviewWidth < CompactReviewThreshold;
+
+    /// <summary>Gets a value that indicates whether integrated student detail is open.</summary>
+    public bool IsStudentDetailOpen => StudentDetail.IsOpen;
 
     /// <summary>Gets the current general error.</summary>
     public string? GeneralError
@@ -445,11 +458,32 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         get => _selectedClass;
         set
         {
-            if (SetProperty(ref _selectedClass, value))
+            if (!SetProperty(ref _selectedClass, value))
             {
-                ApplyStudentFilter();
-                OnPropertyChanged(nameof(VisibleStudentSummary));
+                return;
             }
+
+            StudentDetail.Close();
+            SelectedStudent = null;
+            ApplyStudentFilter();
+            OnPropertyChanged(nameof(VisibleStudentSummary));
+        }
+    }
+
+    /// <summary>Gets or sets the student selected in the review table.</summary>
+    public StudentReviewViewModel? SelectedStudent
+    {
+        get => _selectedStudent;
+        set
+        {
+            if (!SetProperty(ref _selectedStudent, value)
+                || value is null
+                || !StudentDetail.IsOpen)
+            {
+                return;
+            }
+
+            StudentDetail.ShowStudent(value);
         }
     }
 
@@ -774,6 +808,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         _themeService.Changed -= OnThemeChanged;
+        StudentDetail.PropertyChanged -= OnStudentDetailPropertyChanged;
+        StudentDetail.StudentChanged -= OnDetailStudentChanged;
+        StudentDetail.Close();
         ClearClassHeaders();
         _operationCancellation?.Cancel();
         _operationCancellation?.Dispose();
@@ -1095,6 +1132,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (CanContinueToGeneration)
         {
+            StudentDetail.Close();
             WorkflowState = DesktopWorkflowState.Configuring;
         }
     }
@@ -1124,6 +1162,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             Classes.Clear();
             Issues.Clear();
             VisibleStudents.Clear();
+            StudentDetail.Close();
+            SelectedStudent = null;
             SelectedClass = null;
             ClearReviewFilters();
             HistoricalInput.Clear();
@@ -1193,7 +1233,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             var students = classPlan.Rows.Select(row => new StudentReviewViewModel(
                 classPlan.Roster.ClassIdentifier,
                 row,
-                classIssues.Where(issue => AffectsStudent(issue.Issue, row)).ToArray())).ToArray();
+                classIssues.Where(issue => AffectsStudent(issue.Issue, row)).ToArray(),
+                classPlan.Roster.SourcePath)).ToArray();
             Classes.Add(new ClassReviewViewModel(classPlan, students, classIssues));
             if (!classPlan.ProducesDocument)
             {
@@ -1225,6 +1266,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         {
             OnPropertyChanged(nameof(VisibleStudentSummary));
             OnPropertyChanged(nameof(HasVisibleStudents));
+            StudentDetail.UpdateVisibleStudents(VisibleStudents);
             return;
         }
 
@@ -1237,6 +1279,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
         OnPropertyChanged(nameof(VisibleStudentSummary));
         OnPropertyChanged(nameof(HasVisibleStudents));
+        StudentDetail.UpdateVisibleStudents(VisibleStudents);
     }
 
     private static bool MatchesSearch(StudentReviewViewModel student, string search) =>
@@ -1302,15 +1345,19 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         var body = $"{issue.Issue.Detail}{Environment.NewLine}{Environment.NewLine}"
             + $"Consecuencia: {issue.Consequence}{Environment.NewLine}{Environment.NewLine}"
             + string.Join(Environment.NewLine, references.Select(reference => $"• {reference}"));
-        DetailRequested?.Invoke(this, new DetailRequestedEventArgs(issue.Title, body));
+        IssueDetailRequested?.Invoke(this, new IssueDetailRequestedEventArgs(issue.Title, body));
     }
 
-    private void ShowStudent(object? parameter)
+    private void OpenStudentDetail(object? parameter)
     {
-        if (parameter is StudentReviewViewModel student)
+        if (parameter is not StudentReviewViewModel student
+            || !VisibleStudents.Contains(student))
         {
-            DetailRequested?.Invoke(this, new DetailRequestedEventArgs(student.Name, student.Detail));
+            return;
         }
+
+        SelectedStudent = student;
+        StudentDetail.Open(student, VisibleStudents);
     }
 
     private void ShowIssueGroup(object? parameter)
@@ -1335,7 +1382,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             issues.Select(issue =>
                 $"[{issue.Severity}] {issue.Title} — {issue.Scope}{Environment.NewLine}"
                 + $"{issue.Issue.Detail}{Environment.NewLine}{issue.Consequence}"));
-        DetailRequested?.Invoke(this, new DetailRequestedEventArgs(title, body));
+        IssueDetailRequested?.Invoke(this, new IssueDetailRequestedEventArgs(title, body));
     }
 
     private void FilterByStatus(object? parameter)
@@ -1362,6 +1409,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         Issues.Clear();
         ClearClassHeaders();
         VisibleStudents.Clear();
+        StudentDetail.Close();
+        SelectedStudent = null;
         SelectedClass = null;
         ClearReviewFilters();
         foreach (var input in Inputs())
@@ -1459,6 +1508,19 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsCompactReviewLayout));
     }
 
+    private void OnStudentDetailPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(StudentDetailViewModel.IsOpen))
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(IsStudentDetailOpen));
+    }
+
+    private void OnDetailStudentChanged(object? sender, StudentDetailStudentChangedEventArgs e) =>
+        SelectedStudent = e.Student;
+
     private void NotifyThemeSelectionChanged()
     {
         OnPropertyChanged(nameof(IsSystemThemeSelected));
@@ -1504,6 +1566,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         or DesktopWorkflowState.GenerationFailed;
 
     private bool CanReturnToReview => CanEditConfiguration && _prepared is not null;
+
+    private double AvailableReviewWidth => Math.Max(0, _windowWidth - SidebarColumnWidth);
 
     private TaskCompletionSource BeginSessionUpdate()
     {
@@ -1760,7 +1824,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 }
 
 /// <summary>Contains content for one temporary read-only detail dialog.</summary>
-public sealed class DetailRequestedEventArgs(string title, string body) : EventArgs
+public sealed class IssueDetailRequestedEventArgs(string title, string body) : EventArgs
 {
     /// <summary>Gets the dialog title.</summary>
     public string Title { get; } = title;

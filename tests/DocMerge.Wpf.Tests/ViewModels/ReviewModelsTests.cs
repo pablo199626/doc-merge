@@ -39,17 +39,15 @@ public sealed class ReviewModelsTests
     }
 
     [Fact]
-    public void StudentDetail_NewStudent_ExplainsClassAndGeneratedResult()
+    public void StudentReview_NewStudent_ExposesStructuredIdentityAndStatus()
     {
         var classIdentifier = new ClassIdentifier("ESO", 2, "C");
         var row = NewStudentRow("ALUMNO, NUEVO", "87654321", ordinal: 1);
         var student = new StudentReviewViewModel(classIdentifier, row, []);
 
-        var detail = student.Detail;
-
-        Assert.Contains("Clase: 2ESOC", detail);
-        Assert.Contains("No hay registros históricos candidatos", detail);
-        Assert.Contains("las demás columnas quedarán vacías", detail);
+        Assert.Equal("2ESOC", student.ClassIdentifier.CanonicalCode);
+        Assert.Equal("87654321", student.StudentNumber);
+        Assert.Equal("Alumno nuevo", student.Status);
     }
 
     private static StudentRowPlan NewStudentRow(string name, string studentNumber, int ordinal)

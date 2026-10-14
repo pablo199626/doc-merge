@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:automation="clr-namespace:System.Windows.Automation;assembly=PresentationCore"
+        xmlns:controls="clr-namespace:DocMerge.Wpf.Controls"
         xmlns:domain="clr-namespace:DocMerge.Domain.Generation;assembly=DocMerge.Domain"
         xmlns:services="clr-namespace:DocMerge.Wpf.Services"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -564,23 +565,14 @@
                         <ContentControl Content="{Binding TemplateInput}" ContentTemplate="{StaticResource CompactInputCardTemplate}" />
                     </UniformGrid>
 
-                    <Grid Grid.Row="1">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="310" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <Grid x:Name="ReviewWorkspace" Grid.Row="1" ClipToBounds="True" SizeChanged="ReviewWorkspace_SizeChanged">
+                         <Grid.ColumnDefinitions>
+                             <ColumnDefinition x:Name="ClassesColumn" Width="260" />
+                             <ColumnDefinition x:Name="StudentsColumn" Width="*" />
+                             <ColumnDefinition x:Name="StudentDetailColumn" Width="0" />
+                         </Grid.ColumnDefinitions>
 
-                        <Border x:Name="ClassListPanel" Margin="5">
-                            <Border.Style>
-                                <Style TargetType="Border" BasedOn="{StaticResource Card}">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Border.Style>
+                         <Border x:Name="ClassListPanel" Margin="5" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -709,18 +701,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Margin="5">
-                            <Border.Style>
-                                <Style TargetType="Border" BasedOn="{StaticResource Card}">
-                                    <Setter Property="Grid.Column" Value="1" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
-                                            <Setter Property="Grid.Column" Value="0" />
-                                            <Setter Property="Grid.ColumnSpan" Value="2" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Border.Style>
+                         <Border x:Name="StudentsPanel" Grid.Column="1" Margin="5" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -730,19 +711,9 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <ComboBox Grid.Row="0" ItemsSource="{Binding Classes}" SelectedItem="{Binding SelectedClass}"
+                                <ComboBox x:Name="CompactClassSelector" Grid.Row="0" ItemsSource="{Binding Classes}" SelectedItem="{Binding SelectedClass}"
                                           DisplayMemberPath="Code" Margin="0,0,0,12" MinHeight="40"
                                           automation:AutomationProperties.Name="Clase revisada">
-                                    <ComboBox.Style>
-                                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsCompactReviewLayout}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </ComboBox.Style>
                                 </ComboBox>
 
                                  <WrapPanel Grid.Row="1" VerticalAlignment="Center">
@@ -838,7 +809,9 @@
                                             Background="{DynamicResource SurfaceAltBrush}"
                                             BorderBrush="{DynamicResource TableSeparatorBrush}"
                                             BorderThickness="0,0,0,1" />
-                                    <DataGrid x:Name="ReviewGrid" ItemsSource="{Binding VisibleStudents}" AutoGenerateColumns="False"
+                                    <DataGrid x:Name="ReviewGrid" ItemsSource="{Binding VisibleStudents}"
+                                               SelectedItem="{Binding SelectedStudent, Mode=TwoWay}"
+                                               AutoGenerateColumns="False"
                                                MinWidth="0" HorizontalAlignment="Stretch" Background="Transparent"
                                                EnableColumnVirtualization="True"
                                                VirtualizingPanel.IsVirtualizing="True"
@@ -896,13 +869,13 @@
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn Header="Detalle" Width="100">
+                                            <DataGridTemplateColumn x:Name="ReviewDetailColumn" Header="Detalle" Width="100">
                                                 <DataGridTemplateColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <Button Style="{StaticResource InlineDetailButton}"
                                                                 ToolTip="Abrir el detalle de este alumno"
                                                                 automation:AutomationProperties.Name="Abrir detalle del alumno"
-                                                                Command="{Binding DataContext.ShowStudentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                Click="ReviewDetailButton_Click"
                                                                 CommandParameter="{Binding}">
                                                             <TextBlock Text="Ver detalle" TextWrapping="NoWrap"
                                                                        Foreground="{DynamicResource AccentBrush}" />
@@ -933,22 +906,377 @@
                                                        Style="{StaticResource MutedText}" FontSize="12" Margin="0,3,0,0" />
                                         </StackPanel>
                                     </Border>
-                                  </Grid>
-                                </Border>
-                                <Grid Grid.Row="4" Margin="0,8,0,0">
+                                   </Grid>
+                                 </Border>
+                                 <WrapPanel Grid.Row="4" Margin="0,8,0,0">
+                                     <TextBlock Text="{Binding VisibleStudentSummary}" Style="{StaticResource MutedText}" />
+                                     <TextBlock Text="{Binding ActiveFilterSummary, StringFormat= · {0}}" Margin="8,0,0,0"
+                                                Foreground="{DynamicResource AccentBrush}"
+                                                Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
+                                 </WrapPanel>
+                             </Grid>
+                         </Border>
+
+                        <Border x:Name="StudentDetailPanel" Grid.Column="2"
+                                Margin="0"
+                                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1,0,0,0"
+                                Visibility="Collapsed">
+                            <Grid DataContext="{Binding StudentDetail}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Grid Margin="16,14,16,0">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding VisibleStudentSummary}" Style="{StaticResource MutedText}" />
-                                        <TextBlock Text="{Binding ActiveFilterSummary, StringFormat= · {0}}" Margin="8,0,0,0"
-                                                   Foreground="{DynamicResource AccentBrush}"
-                                                   Visibility="{Binding HasActiveReviewFilters, Converter={StaticResource BooleanVisibility}}" />
+                                    <TextBlock x:Name="StudentDetailHeading" Text="{Binding Name}"
+                                               FontSize="18" FontWeight="SemiBold" MaxWidth="250"
+                                               ToolTip="{Binding Name}" Focusable="True"
+                                               automation:AutomationProperties.Name="{Binding Name}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <Button x:Name="BackToStudentListButton" Content="Volver al listado" Visibility="Collapsed"
+                                                Command="{Binding CloseCommand}" Margin="0,0,6,0" />
+                                        <Button Content="‹" Width="40" Height="40" Margin="3,0"
+                                                Command="{Binding PreviousStudentCommand}"
+                                                ToolTip="Alumno anterior"
+                                                automation:AutomationProperties.Name="Alumno anterior" />
+                                        <Button Content="›" Width="40" Height="40" Margin="3,0"
+                                                Command="{Binding NextStudentCommand}"
+                                                ToolTip="Alumno siguiente"
+                                                automation:AutomationProperties.Name="Alumno siguiente" />
+                                        <Button x:Name="CloseStudentDetailButton" Content="×" Width="40" Height="40" Margin="3,0,0,0"
+                                                Command="{Binding CloseCommand}"
+                                                ToolTip="Cerrar detalle"
+                                                automation:AutomationProperties.Name="Cerrar detalle del alumno" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="1" Text="Haz clic en una fila o pulsa Enter para ver el detalle"
-                                               Margin="12,0,0,0" Style="{StaticResource MutedText}"
-                                               FontSize="12" TextWrapping="NoWrap" />
+                                    <TextBlock Grid.Row="1">
+                                        <TextBlock.Inlines>
+                                            <Run Text="{Binding ClassCode, Mode=OneWay}" />
+                                            <Run Text=" · NIA " />
+                                            <Run Text="{Binding StudentNumber, Mode=OneWay}" />
+                                        </TextBlock.Inlines>
+                                    </TextBlock>
+                                    <Grid Grid.Row="2" Margin="0,8,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border x:Name="DetailStatusBadge" HorizontalAlignment="Left">
+                                            <Border.Style>
+                                                <Style TargetType="Border" BasedOn="{StaticResource Pill}">
+                                                    <Setter Property="Background" Value="{DynamicResource SuccessSoftBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.NewStudent}">
+                                                            <Setter Property="Background" Value="{DynamicResource InformationSoftBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.Conflict}">
+                                                            <Setter Property="Background" Value="{DynamicResource ErrorSoftBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Grid Width="16">
+                                                    <ContentControl>
+                                                        <ContentControl.Style>
+                                                            <Style TargetType="ContentControl">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.NewStudent}">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.Conflict}">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </ContentControl.Style>
+                                                        <ui:SymbolIcon Symbol="CheckmarkCircle16" FontSize="14" Foreground="{DynamicResource SuccessBrush}" />
+                                                    </ContentControl>
+                                                    <ContentControl>
+                                                        <ContentControl.Style>
+                                                            <Style TargetType="ContentControl">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.NewStudent}">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </ContentControl.Style>
+                                                        <ui:SymbolIcon Symbol="Info16" FontSize="14" Foreground="{DynamicResource InformationBrush}" />
+                                                    </ContentControl>
+                                                    <ContentControl>
+                                                        <ContentControl.Style>
+                                                            <Style TargetType="ContentControl">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.Conflict}">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </ContentControl.Style>
+                                                        <ui:SymbolIcon Symbol="DismissCircle16" FontSize="14" Foreground="{DynamicResource ErrorBrush}" />
+                                                    </ContentControl>
+                                                </Grid>
+                                                <TextBlock x:Name="DetailStatusText" Text="{Binding Status}" Margin="4,0,0,0" FontWeight="SemiBold">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.NewStudent}">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource InformationBrush}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.Conflict}">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="{Binding PositionText}" VerticalAlignment="Center"
+                                                   Style="{StaticResource MutedText}"
+                                                   automation:AutomationProperties.Name="{Binding PositionText, StringFormat=Alumno {0} resultados visibles}" />
+                                    </Grid>
+                                </Grid>
+
+                                        <Border x:Name="OutcomeCard" Grid.Row="1" CornerRadius="9" Padding="12" Margin="16,0,12,10">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="{DynamicResource SuccessSoftBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.NewStudent}">
+                                                            <Setter Property="Background" Value="{DynamicResource InformationSoftBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.Conflict}">
+                                                            <Setter Property="Background" Value="{DynamicResource ErrorSoftBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="32" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid Width="24">
+                                                    <ContentControl>
+                                                        <ContentControl.Style>
+                                                            <Style TargetType="ContentControl">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.NewStudent}">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.Conflict}">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </ContentControl.Style>
+                                                        <ui:SymbolIcon Symbol="CheckmarkCircle24" FontSize="24" Foreground="{DynamicResource SuccessBrush}" />
+                                                    </ContentControl>
+                                                    <ContentControl>
+                                                        <ContentControl.Style>
+                                                            <Style TargetType="ContentControl">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.NewStudent}">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </ContentControl.Style>
+                                                        <ui:SymbolIcon Symbol="Info24" FontSize="24" Foreground="{DynamicResource InformationBrush}" />
+                                                    </ContentControl>
+                                                    <ContentControl>
+                                                        <ContentControl.Style>
+                                                            <Style TargetType="ContentControl">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ResolutionType}" Value="{x:Static domain:HistoricalResolutionType.Conflict}">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </ContentControl.Style>
+                                                        <ui:SymbolIcon Symbol="DismissCircle24" FontSize="24" Foreground="{DynamicResource ErrorBrush}" />
+                                                    </ContentControl>
+                                                </Grid>
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{Binding OutcomeTitle}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding OutcomeDescription}" Margin="0,3,0,0"
+                                                               FontSize="12" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                <ScrollViewer Grid.Row="2" Margin="16,0,12,4"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel>
+                                        <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="Medidas del alumno" FontWeight="SemiBold" FontSize="15" />
+                                                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                                Visibility="{Binding HasCandidates, Converter={StaticResource BooleanVisibility}}">
+                                                        <Button Content="‹" Width="32" Height="30" Command="{Binding PreviousCandidateCommand}"
+                                                                ToolTip="Candidato anterior" />
+                                                        <TextBlock Text="{Binding CandidatePositionText}" Margin="7,0"
+                                                                   VerticalAlignment="Center" FontSize="11" />
+                                                        <Button Content="›" Width="32" Height="30" Command="{Binding NextCandidateCommand}"
+                                                                ToolTip="Candidato siguiente" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <controls:RichContentViewer RichContent="{Binding MeasuresContent}">
+                                                    <controls:RichContentViewer.Style>
+                                                        <Style TargetType="controls:RichContentViewer">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasMeasures}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </controls:RichContentViewer.Style>
+                                                </controls:RichContentViewer>
+                                                <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="8" Padding="20" MinHeight="130">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasMeasures}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <StackPanel VerticalAlignment="Center">
+                                                        <ui:SymbolIcon Symbol="Document24" FontSize="30"
+                                                                       Foreground="{DynamicResource MutedTextBrush}" />
+                                                        <TextBlock Text="{Binding MeasuresEmptyMessage}" HorizontalAlignment="Center"
+                                                                   FontWeight="SemiBold" Margin="0,8,0,0" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Expander Header="Procedencia" Margin="0,0,0,6">
+                                            <StackPanel>
+                                            <ItemsControl ItemsSource="{Binding Provenance}" Margin="8">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                                                                Padding="4,8">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <StackPanel>
+                                                                    <TextBlock Text="{Binding Kind}" FontWeight="SemiBold" />
+                                                                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                                                               ToolTip="{Binding Path}" />
+                                                                    <TextBlock Text="{Binding Location}" Style="{StaticResource MutedText}" FontSize="11" />
+                                                                </StackPanel>
+                                                                <Button Grid.Column="1" Content="Abrir" Margin="8,0,0,0"
+                                                                        Command="{Binding DataContext.OpenSourceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        automation:AutomationProperties.Name="{Binding DisplayName, StringFormat=Abrir {0}}" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Margin="12,0,12,10" FontSize="11" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
+                                                       Text="Talos no modifica el documento al abrirlo. Si lo cambias en otra aplicación, su integridad se comprobará antes de generar." />
+                                            </StackPanel>
+                                        </Expander>
+
+                                        <Expander Header="{Binding CandidatesHeader}" Margin="0,0,0,6"
+                                                  Visibility="{Binding HasCandidates, Converter={StaticResource BooleanVisibility}}"
+                                                  automation:AutomationProperties.HelpText="Los históricos se muestran solo para consulta y no resuelven el conflicto.">
+                                            <ItemsControl ItemsSource="{Binding Candidates}" Margin="8">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Button HorizontalContentAlignment="Stretch" Margin="0,3"
+                                                                Command="{Binding DataContext.InspectCandidateCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Record.DocumentPath}" TextTrimming="CharacterEllipsis"
+                                                                           ToolTip="{Binding Record.DocumentPath}" />
+                                                                <TextBlock Text="{Binding Record.Location}" FontSize="11"
+                                                                           Foreground="{DynamicResource MutedTextBrush}" />
+                                                                <TextBlock Text="Consultar" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Expander>
+
+                                        <Expander Header="{Binding IssuesHeader}">
+                                            <ItemsControl ItemsSource="{Binding Issues}" Margin="8">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Margin="4,6">
+                                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                                            <TextBlock Text="{Binding Issue.Detail}" Margin="0,3,0,0" />
+                                                            <TextBlock Text="{Binding Consequence}" Margin="0,3,0,0"
+                                                                       Foreground="{DynamicResource WarningBrush}" />
+                                                            <ItemsControl ItemsSource="{Binding Sources}" Margin="0,4,0,0">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <TextBlock FontSize="11" Foreground="{DynamicResource MutedTextBrush}"
+                                                                                   TextWrapping="Wrap">
+                                                                            <Run Text="• " />
+                                                                            <Run Text="{Binding DisplayName, Mode=OneWay}" />
+                                                                            <Run Text=" — " />
+                                                                            <Run Text="{Binding Location, Mode=OneWay}" />
+                                                                        </TextBlock>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Expander>
+
+                                        <TextBlock Text="{Binding SourceOpenError}" Margin="0,8,0,0"
+                                                   Foreground="{DynamicResource ErrorBrush}" TextWrapping="Wrap"
+                                                   Visibility="{Binding HasSourceOpenError, Converter={StaticResource BooleanVisibility}}" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                                <Grid Grid.Row="3" Margin="16,8,16,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Content="Anterior" Command="{Binding PreviousStudentCommand}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding PositionText}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Button Grid.Column="2" Content="Siguiente" Command="{Binding NextStudentCommand}" />
                                 </Grid>
                             </Grid>
                         </Border>

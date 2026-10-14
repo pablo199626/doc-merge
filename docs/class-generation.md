@@ -59,7 +59,9 @@ revisión de solo lectura y configuración/generación. El paso de revisión con
 con «Configurar documentos» y nunca escribe archivos; «Generar documentos» es la
 única acción que ejecuta el lote. Expone el NIA, la procedencia histórica,
 los campos legibles y las incidencias globales o asociadas a clase/alumno. No
-renderiza Word/PDF ni permite editar o resolver manualmente los datos.
+renderiza el documento Word completo ni el PDF, pero prepara y muestra una
+vista enriquecida de las medidas históricas. No permite editar ni resolver
+manualmente los datos.
 La presentación comercial se identifica como **Talos — Automatización
 documental** y usa controles y temas Fluent de WPF UI 4.3.0, manteniendo en
 recursos propios únicamente los colores semánticos y la identidad visual.
@@ -86,12 +88,41 @@ oscuro. El lateral anima ancho y etiquetas durante 200 ms, sustituye transicione
 interrumpidas y aplica el estado final directamente cuando Windows desactiva las
 animaciones.
 
-El detalle de alumno y el informe de incidencias usan recursos dinámicos desde
-su primer fotograma. Presentan identidad, clase, resolución, procedencia,
-consecuencia y referencias sin permitir edición. La tabla conserva una selección
-legible con y sin foco, incluso mientras el detalle modal está abierto. Al cerrar
-un detalle, una activación por fila o Enter devuelve el foco a la tabla sin dibujar
-un contorno sobre una celda aislada; el botón «Ver detalle» recupera su propio foco.
+El detalle de alumno está integrado en la revisión y es independiente de la modal
+reservada a los informes generales de incidencias. Se acopla como una tercera
+columna de 440 DIP al borde derecho y ocupa toda la altura útil. Las tres zonas son
+hijos directos de `ReviewWorkspace`: el detalle no pertenece a `ReviewTableSurface`.
+Con 1500 DIP útiles se muestran clases (260 DIP), tabla (espacio restante) y detalle.
+Por debajo se compactan las clases; con menos de 1040 DIP útiles el detalle pasa a
+vista principal temporal con «Volver al listado», conservando la instancia de la
+tabla, sus filtros y selección. La transición de 200 ms modifica progresivamente
+el espacio reservado al detalle, recortado por el área de revisión, sin superponerlo
+a la tabla. Cabecera, resultado y navegación inferior permanecen fijos; solo el
+cuerpo tiene scroll. Cambiar de clase, excluir
+mediante filtros al alumno visible o abandonar la revisión cierra y descarta el
+detalle.
+
+La cabecera fija presenta identidad, clase, NIA, estado, posición dentro de los
+resultados visibles y navegación anterior/siguiente. La navegación sigue
+exactamente `VisibleStudents`, por lo que respeta búsqueda, filtro y orden. La
+activación por fila, Enter o «Ver detalle» conserva las protecciones frente a
+scrollbars y arrastre; al cerrar se restaura la tabla o el botón de origen. Escape
+cierra primero el detalle y las animaciones se omiten cuando Windows las desactiva.
+
+«Medidas del alumno» combina en orden las celdas históricas no identificativas y
+no vacías. `DocxHistoricalStudentReader` prepara durante la única lectura inicial
+una proyección inmutable de párrafos, runs, saltos, formato de carácter, alineación
+y numeración básica. La WPF la representa sobre una superficie clara tipo papel,
+también en tema oscuro, sin releer documentos ni convertirlos a RTF. El
+WordprocessingML original de `DocumentRecord.RowXml` continúa siendo la única
+fuente para generación. Imágenes, objetos y otros elementos no representables se
+señalan explícitamente en lugar de omitirse en silencio.
+
+Encontrado muestra las medidas del histórico único; Alumno nuevo presenta «No hay
+medidas registradas»; Conflicto conserva la omisión y permite recorrer candidatos
+solo para inspección, sin modificar `SelectedCandidate`. Procedencia e incidencias
+usan datos estructurados. La apertura de un PDF o DOCX original exige una acción
+explícita, valida ruta, existencia y extensión y no cambia el plan.
 
 La salida se elige después de revisar. La ejecución conserva el objeto
 `PreparedClassGeneration` revisado y no crea silenciosamente un plan diferente.
@@ -263,6 +294,12 @@ Bloquean la publicación los problemas estructurales, incluidos:
 - La primera WPF cubre revisión de solo lectura; edición y resolución manual
   del alumnado quedan expresamente fuera de esta release; solo se editan los dos
   valores de cabecera de salida descritos arriba.
+- El visor enriquecido es deliberadamente unidireccional. Conserva con fidelidad
+  razonable texto, párrafos, negrita, cursiva, subrayado, fuente, tamaño, color,
+  resaltado, alineación y listas básicas, pero no pretende reproducir paginación,
+  métricas exactas de Word, fuentes ausentes, objetos embebidos ni numeración
+  avanzada. La futura edición requerirá una transformación explícita de vuelta a
+  WordprocessingML; no se presupone reversibilidad de `FlowDocument` o RTF.
 - Los conflictos se representan mediante modelos e incidencias estructuradas;
   la interfaz los explica, pero no permite elegir o editar una resolución.
 - El CLI y la WPF generan filas neutras para alumnos nuevos. Los conflictos se
@@ -383,3 +420,20 @@ comprobados. La copia aislada confirmó el icono Windows, la plantilla incrustad
 y su limpieza. Se revisaron visualmente claro, oscuro, Sistema, cambio de tema en
 caliente, lateral expandido/colapsado y 1366×820; el escalado DPI 125–200 % sigue
 requiriendo comprobación manual en equipos configurados con esos factores.
+
+El 14 de octubre de 2026 se implementó desde fuente el panel integrado de detalle
+del alumno y el visor enriquecido de medidas, sin modificar el motor de generación.
+La suite quedó en 180 pruebas: Domain 44, Application 15, Infrastructure 50,
+Console 11 y WPF 60; el build terminó sin avisos y el formato quedó limpio. Una
+simulación real confirmó 94 asignaciones, 92 inclusiones, 2 omisiones y los cuatro
+documentos previstos, y los 12 archivos de entrada comprobados conservaron sus
+hashes. No se publicó una entrega nueva. Permanecen pendientes la validación visual
+manual exhaustiva del panel en temas, anchuras y DPI indicados, así como Narrador y
+animaciones desactivadas.
+
+La corrección posterior de la jerarquía XAML añade una prueba STA de ventana real:
+comprueba padres, límites, ancho de 440 DIP, ausencia de solapamiento, cambio de
+alumno, transiciones interrumpidas y recuperación del ancho al cerrar. Se revisaron
+capturas con datos ficticios a 1920×1080 y 1366×768, claro/oscuro, modo estrecho y
+escalado de layout al 150 %. Este último no sustituye pruebas con DPI nativo de
+Windows. La suite pasa a 181 pruebas (WPF 61); no se publica una entrega nueva.

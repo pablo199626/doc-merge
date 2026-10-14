@@ -10,7 +10,7 @@ using DocMerge.Wpf.ViewModels;
 
 namespace DocMerge.Wpf.Tests.ViewModels;
 
-public sealed class MainWindowViewModelTests
+public sealed partial class MainWindowViewModelTests
 {
     [Fact]
     public void Version_DesktopAssembly_UsesCommercialVersion()
@@ -293,6 +293,60 @@ public sealed class MainWindowViewModelTests
         Assert.Empty(viewModel.VisibleStudents);
         Assert.Equal(summary, viewModel.BatchSummary);
         Assert.Equal(1, viewModel.SelectedClass!.StudentCount);
+    }
+
+    [Fact]
+    public async Task OpenStudentDetail_FilterExcludesStudent_ClosesWithoutChangingFilter()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        var student = Assert.Single(viewModel.VisibleStudents);
+        viewModel.OpenStudentDetailCommand.Execute(student);
+
+        viewModel.SelectedFilter = "Encontrado";
+
+        Assert.False(viewModel.IsStudentDetailOpen);
+        Assert.Equal("Encontrado", viewModel.SelectedFilter);
+        Assert.Empty(viewModel.VisibleStudents);
+    }
+
+    [Fact]
+    public async Task ContinueToGenerationCommand_OpenDetail_ClosesDetailWithoutChangingPlan()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        var summary = viewModel.BatchSummary;
+        viewModel.OpenStudentDetailCommand.Execute(Assert.Single(viewModel.VisibleStudents));
+
+        viewModel.ContinueToGenerationCommand.Execute(parameter: null);
+
+        Assert.False(viewModel.IsStudentDetailOpen);
+        Assert.True(viewModel.IsGenerationStep);
+        Assert.Equal(summary, viewModel.BatchSummary);
+    }
+
+    [Fact]
+    public async Task UpdateWindowWidth_OpenDetail_CompactsOnlyClassSelector()
+    {
+        using var fixture = new ViewModelFixture();
+        var viewModel = fixture.CreateViewModel();
+        fixture.SelectInputs(viewModel);
+        await viewModel.AnalyzeCommand.ExecuteAsync();
+        viewModel.OpenStudentDetailCommand.Execute(Assert.Single(viewModel.VisibleStudents));
+
+        viewModel.UpdateWindowWidth(1500);
+
+        Assert.True(viewModel.IsStudentDetailOpen);
+        Assert.False(viewModel.IsCompactReviewLayout);
+
+        viewModel.UpdateWindowWidth(1100);
+
+        Assert.True(viewModel.IsStudentDetailOpen);
+        Assert.True(viewModel.IsCompactReviewLayout);
     }
 
     [Fact]

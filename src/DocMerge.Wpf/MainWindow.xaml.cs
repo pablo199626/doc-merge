@@ -13,6 +13,14 @@ namespace DocMerge.Wpf;
 /// <summary>Hosts the desktop workflow and handles presentation-only window behavior.</summary>
 public partial class MainWindow : Window
 {
+    private const double StudentDetailPanelWidth = 440;
+    private const double ClassesPanelWidth = 260;
+    private const double SideDetailMinimumWidth = 1040;
+    private const double ThreeColumnMinimumWidth = 1500;
+    private const double ClassListMinimumWidth = 1060;
+    private static readonly DependencyProperty DetailExtentProperty = DependencyProperty.Register(
+        "DetailExtent", typeof(double), typeof(MainWindow),
+        new PropertyMetadata(0d, OnDetailExtentChanged));
     private readonly MainWindowViewModel _viewModel;
     private readonly Stopwatch _sidebarAnimationClock = new();
     private readonly ReviewRowActivationTracker _reviewRowActivation = new();
@@ -20,6 +28,7 @@ public partial class MainWindow : Window
     private bool _isClosePending;
     private bool _isCloseAuthorized;
     private bool _isSidebarAnimating;
+    private int _studentDetailAnimationSequence;
     private double _sidebarFromWidth;
     private double _sidebarToWidth;
     private double _columnFromWidth;
@@ -32,7 +41,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         DataContext = viewModel;
-        viewModel.DetailRequested += ShowDetail;
+        viewModel.IssueDetailRequested += ShowIssueDetail;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
@@ -41,7 +50,7 @@ public partial class MainWindow : Window
     {
         if (!_viewModel.IsBusy || _isCloseAuthorized)
         {
-            _viewModel.DetailRequested -= ShowDetail;
+            _viewModel.IssueDetailRequested -= ShowIssueDetail;
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             SystemParameters.StaticPropertyChanged -= OnSystemParametersChanged;
             StopSidebarAnimation();
@@ -157,6 +166,13 @@ public partial class MainWindow : Window
 
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && _viewModel.IsStudentDetailOpen)
+        {
+            _viewModel.StudentDetail.CloseCommand.Execute(parameter: null);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key != Key.Escape || !_viewModel.IsSidebarOverlayVisible)
         {
             return;
@@ -170,6 +186,32 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainWindowViewModel.IsStudentDetailOpen))
+        {
+            ReviewDetailColumn.Visibility = _viewModel.IsStudentDetailOpen
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+            if (!_viewModel.IsStudentDetailOpen
+                && Keyboard.FocusedElement is FrameworkElement focused
+                && focused is TextBox or ComboBox)
+            {
+                _detailFocusTarget = focused;
+            }
+
+            Dispatcher.BeginInvoke(_viewModel.IsStudentDetailOpen
+                ? OpenStudentDetailPanel
+                : CloseStudentDetailPanel);
+            return;
+        }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.SelectedStudent)
+            && _viewModel.SelectedStudent is not null)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+                ReviewGrid.ScrollIntoView(_viewModel.SelectedStudent)));
+            return;
+        }
+
         if (e.PropertyName != nameof(MainWindowViewModel.WorkflowState))
         {
             return;
@@ -227,11 +269,11 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
-    private void ShowDetail(object? sender, DetailRequestedEventArgs e)
+    private void ShowIssueDetail(object? sender, IssueDetailRequestedEventArgs e)
     {
         var session = _viewModel.SessionSequence;
         var invoker = _detailFocusTarget ?? Keyboard.FocusedElement;
-        var dialog = new DetailWindow(e.Title, e.Body) { Owner = this };
+        var dialog = new IssueDetailWindow(e.Title, e.Body) { Owner = this };
         dialog.ShowDialog();
         Dispatcher.BeginInvoke(new Action(() =>
         {
@@ -328,20 +370,122 @@ public partial class MainWindow : Window
 
     private void OpenStudentDetail(StudentReviewViewModel student)
     {
-        if (!_viewModel.ShowStudentCommand.CanExecute(student))
+        if (!_viewModel.OpenStudentDetailCommand.CanExecute(student))
         {
             return;
         }
 
         _detailFocusTarget = ReviewGrid;
-        try
+        _viewModel.OpenStudentDetailCommand.Execute(student);
+    }
+
+    private void ReviewDetailButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: StudentReviewViewModel student } button)
         {
-            _viewModel.ShowStudentCommand.Execute(student);
+            return;
         }
-        finally
+
+        _detailFocusTarget = button;
+        _viewModel.OpenStudentDetailCommand.Execute(student);
+        e.Handled = true;
+    }
+
+    private void OpenStudentDetailPanel()
+    {
+        if (!_viewModel.IsStudentDetailOpen)
         {
-            _detailFocusTarget = null;
+            return;
         }
+
+        StudentDetailPanel.Visibility = Visibility.Visible;
+        AnimateStudentDetail(1);
+        CloseStudentDetailButton.Focus();
+    }
+
+    private void CloseStudentDetailPanel()
+    {
+        if (_viewModel.IsStudentDetailOpen)
+        {
+            return;
+        }
+
+        AnimateStudentDetail(0);
+    }
+
+    private void AnimateStudentDetail(double target)
+    {
+        var sequence = ++_studentDetailAnimationSequence;
+        var current = (double)GetValue(DetailExtentProperty);
+        BeginAnimation(DetailExtentProperty, null);
+        SetValue(DetailExtentProperty, target);
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            CompleteStudentDetailClose(sequence);
+            return;
+        }
+
+        var animation = new DoubleAnimation(current, target, TimeSpan.FromMilliseconds(200))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+            FillBehavior = FillBehavior.Stop,
+        };
+        animation.Completed += (_, _) => CompleteStudentDetailClose(sequence);
+        BeginAnimation(DetailExtentProperty, animation);
+    }
+
+    private void CompleteStudentDetailClose(int sequence)
+    {
+        if (sequence != _studentDetailAnimationSequence || _viewModel.IsStudentDetailOpen)
+        {
+            return;
+        }
+
+        StudentDetailPanel.Visibility = Visibility.Collapsed;
+        ApplyReviewLayout();
+        RestoreStudentDetailFocus();
+    }
+
+    private static void OnDetailExtentChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args) =>
+        ((MainWindow)sender).ApplyReviewLayout();
+
+    private void ReviewWorkspace_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyReviewLayout();
+
+    private void ApplyReviewLayout()
+    {
+        if (_viewModel is null || ReviewWorkspace is null)
+        {
+            return;
+        }
+
+        var width = ReviewWorkspace.ActualWidth;
+        var extent = (double)GetValue(DetailExtentProperty);
+        var hasDetail = _viewModel.IsStudentDetailOpen || extent > 0;
+        var fullDetail = hasDetail && width < SideDetailMinimumWidth;
+        var compactClasses = width < (hasDetail ? ThreeColumnMinimumWidth : ClassListMinimumWidth);
+        ClassesColumn.Width = new GridLength(compactClasses ? 0 : ClassesPanelWidth);
+        ClassListPanel.Visibility = compactClasses ? Visibility.Collapsed : Visibility.Visible;
+        CompactClassSelector.Visibility = compactClasses ? Visibility.Visible : Visibility.Collapsed;
+        StudentsPanel.Visibility = fullDetail ? Visibility.Collapsed : Visibility.Visible;
+        StudentsColumn.Width = fullDetail ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        var detailWidth = fullDetail ? width : StudentDetailPanelWidth;
+        StudentDetailColumn.Width = new GridLength(detailWidth * extent);
+        StudentDetailPanel.Width = detailWidth;
+        StudentDetailPanel.HorizontalAlignment = HorizontalAlignment.Left;
+        BackToStudentListButton.Visibility = fullDetail ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RestoreStudentDetailFocus()
+    {
+        var target = _detailFocusTarget;
+        _detailFocusTarget = null;
+        if (target is FrameworkElement { IsVisible: true, IsEnabled: true } element)
+        {
+            element.Focus();
+            return;
+        }
+
+        ReviewGrid.Focus();
     }
 
     private bool IsInteractiveReviewSource(DependencyObject source) =>
@@ -447,6 +591,7 @@ public partial class MainWindow : Window
         }
 
         ApplySidebarLayout(useAnimation: false);
+        AnimateStudentDetail(_viewModel.IsStudentDetailOpen ? 1 : 0);
     }
 
     private void RestoreDetailInvoker(IInputElement? invoker)

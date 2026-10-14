@@ -4,17 +4,17 @@ using System.Windows.Input;
 namespace DocMerge.Wpf;
 
 /// <summary>Displays temporary read-only review details.</summary>
-public partial class DetailWindow : Window
+public partial class IssueDetailWindow : Window
 {
     /// <summary>Initializes a detail dialog.</summary>
-    public DetailWindow(string title, string body)
+    public IssueDetailWindow(string title, string body)
     {
         InitializeComponent();
         Title = title;
         DataContext = new { DialogTitle = title, DialogBody = body };
     }
 
-    private void DetailWindow_Loaded(object sender, RoutedEventArgs e)
+    private void IssueDetailWindow_Loaded(object sender, RoutedEventArgs e)
     {
         var workArea = SystemParameters.WorkArea;
         MaxWidth = Math.Max(MinWidth, workArea.Width - 48);
@@ -24,7 +24,7 @@ public partial class DetailWindow : Window
         CloseButton.Focus();
     }
 
-    private void DetailWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void IssueDetailWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape)
         {

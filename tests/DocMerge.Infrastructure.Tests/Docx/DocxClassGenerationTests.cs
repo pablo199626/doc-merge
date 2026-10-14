@@ -1,4 +1,5 @@
 using System.Text;
+using DocMerge.Application.Documents;
 using DocMerge.Application.Files;
 using DocMerge.Application.Generation;
 using DocMerge.Domain.Generation;
@@ -10,6 +11,166 @@ namespace DocMerge.Infrastructure.Tests.Docx;
 
 public sealed class DocxClassGenerationTests
 {
+    [Fact]
+    public async Task ReadAsync_RichHistoricalMeasures_PreservesFormattingAndUnsupportedNotice()
+    {
+        using var temporary = new TemporaryDirectory();
+        var historicalPath = temporary.File("historical.docx");
+        const string richRow = "<w:tr><w:tc><w:p/></w:tc>"
+            + "<w:tc><w:p><w:r><w:t>Alumno Uno</w:t></w:r></w:p></w:tc>"
+            + "<w:tc><w:p><w:pPr><w:jc w:val=\"center\"/><w:spacing w:before=\"120\" w:after=\"80\"/>"
+            + "<w:ind w:left=\"240\" w:firstLine=\"100\"/></w:pPr>"
+            + "<w:r><w:rPr><w:b/><w:i/><w:u w:val=\"single\"/><w:rFonts w:ascii=\"Arial\"/>"
+            + "<w:sz w:val=\"20\"/><w:color w:val=\"123456\"/><w:highlight w:val=\"yellow\"/>"
+            + "</w:rPr><w:t>Primera</w:t><w:br/><w:tab/><w:t>Segunda</w:t></w:r>"
+            + "<w:object/></w:p></w:tc></w:tr>";
+        DocxTestPackage.Create(
+            historicalPath,
+            [DocxTestPackage.Header + richRow],
+            marker: "HISTORICAL",
+            source: true);
+
+        var snapshot = await new DocxHistoricalStudentReader().ReadAsync(
+            historicalPath,
+            "Nombre y Apellidos",
+            CancellationToken.None);
+
+        var field = Assert.Single(
+            Assert.Single(snapshot.Candidates).ReviewFields,
+            item => item.Header == "Medidas");
+        var paragraph = Assert.Single(field.PreviewContent.Paragraphs);
+        var text = Assert.Single(paragraph.Inlines, inline => inline.Text == "Primera");
+        Assert.Equal(HistoricalParagraphAlignment.Center, paragraph.Formatting.Alignment);
+        Assert.Equal(12, paragraph.Formatting.LeftIndentPoints);
+        Assert.Equal(5, paragraph.Formatting.FirstLineIndentPoints);
+        Assert.Equal(6, paragraph.Formatting.SpaceBeforePoints);
+        Assert.Equal(4, paragraph.Formatting.SpaceAfterPoints);
+        Assert.True(text.Formatting.IsBold);
+        Assert.True(text.Formatting.IsItalic);
+        Assert.True(text.Formatting.IsUnderlined);
+        Assert.Equal("Arial", text.Formatting.FontFamily);
+        Assert.Equal(10, text.Formatting.FontSizePoints);
+        Assert.Equal("123456", text.Formatting.ForegroundColor);
+        Assert.Contains(paragraph.Inlines, inline => inline.Kind == HistoricalRichInlineKind.LineBreak);
+        Assert.Contains(paragraph.Inlines, inline => inline.Kind == HistoricalRichInlineKind.Tab);
+        Assert.Contains(paragraph.Inlines, inline => inline.Kind == HistoricalRichInlineKind.UnsupportedContent);
+        Assert.Contains("<w:object", snapshot.Candidates[0].Record.RowXml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReadAsync_NumberedHistoricalMeasure_ResolvesListDescriptor()
+    {
+        using var temporary = new TemporaryDirectory();
+        var historicalPath = temporary.File("historical.docx");
+        DocxTestPackage.Create(
+            historicalPath,
+            [DocxTestPackage.Header + DocxTestPackage.PersonRow("Alumno Uno", "MEDIDA")],
+            marker: "HISTORICAL",
+            source: true);
+
+        var snapshot = await new DocxHistoricalStudentReader().ReadAsync(
+            historicalPath,
+            "Nombre y Apellidos",
+            CancellationToken.None);
+
+        var field = Assert.Single(
+            Assert.Single(snapshot.Candidates).ReviewFields,
+            item => item.Header == "Medidas");
+        var list = Assert.Single(field.PreviewContent.Paragraphs).List;
+        Assert.NotNull(list);
+        Assert.Equal("decimal", list.Format);
+        Assert.Equal("%1.", list.LevelText);
+        var text = Assert.Single(field.PreviewContent.Paragraphs[0].Inlines);
+        Assert.Equal("FF0000", text.Formatting.ForegroundColor);
+    }
+
+    [Fact]
+    public async Task ReadAsync_StyleCascadeAndBooleanOverride_ResolvesEffectiveFormatting()
+    {
+        using var temporary = new TemporaryDirectory();
+        var historicalPath = temporary.File("historical.docx");
+        const string row = "<w:tr><w:tc><w:p/></w:tc>"
+            + "<w:tc><w:p><w:r><w:t>Alumno Uno</w:t></w:r></w:p></w:tc>"
+            + "<w:tc><w:p><w:pPr><w:pStyle w:val=\"Derived\"/></w:pPr>"
+            + "<w:r><w:rPr><w:rStyle w:val=\"Emphasis\"/><w:b w:val=\"0\"/></w:rPr>"
+            + "<w:t xml:space=\"preserve\"> medida </w:t></w:r></w:p></w:tc></w:tr>";
+        DocxTestPackage.Create(historicalPath, [DocxTestPackage.Header + row], source: true);
+        DocxTestPackage.ReplacePart(
+            historicalPath,
+            "word/styles.xml",
+            $"<w:styles xmlns:w=\"{DocxTestPackage.WordNamespace}\">"
+            + "<w:docDefaults><w:rPrDefault><w:rPr><w:b/><w:rFonts w:ascii=\"Fallback Font\"/></w:rPr></w:rPrDefault></w:docDefaults>"
+            + "<w:style w:type=\"paragraph\" w:styleId=\"Base\"><w:rPr><w:i/></w:rPr></w:style>"
+            + "<w:style w:type=\"paragraph\" w:styleId=\"Derived\"><w:basedOn w:val=\"Base\"/><w:rPr><w:u w:val=\"single\"/></w:rPr></w:style>"
+            + "<w:style w:type=\"character\" w:styleId=\"Emphasis\"><w:rPr><w:color w:val=\"ABCDEF\"/></w:rPr></w:style>"
+            + "</w:styles>");
+
+        var snapshot = await new DocxHistoricalStudentReader().ReadAsync(
+            historicalPath,
+            "Nombre y Apellidos",
+            CancellationToken.None);
+
+        var field = Assert.Single(
+            Assert.Single(snapshot.Candidates).ReviewFields,
+            item => item.Header == "Medidas");
+        var inline = Assert.Single(Assert.Single(field.PreviewContent.Paragraphs).Inlines);
+        Assert.Equal(" medida ", inline.Text);
+        Assert.False(inline.Formatting.IsBold);
+        Assert.True(inline.Formatting.IsItalic);
+        Assert.True(inline.Formatting.IsUnderlined);
+        Assert.Equal("Fallback Font", inline.Formatting.FontFamily);
+        Assert.Equal("ABCDEF", inline.Formatting.ForegroundColor);
+    }
+
+    [Fact]
+    public async Task ReadAsync_NonIdentityCells_PreservesPhysicalOrder()
+    {
+        using var temporary = new TemporaryDirectory();
+        var historicalPath = temporary.File("historical.docx");
+        const string header = "<w:tr><w:tc><w:p><w:r><w:t>Primera</w:t></w:r></w:p></w:tc>"
+            + "<w:tc><w:p><w:r><w:t>Nombre y Apellidos</w:t></w:r></w:p></w:tc>"
+            + "<w:tc><w:p><w:r><w:t>Segunda</w:t></w:r></w:p></w:tc></w:tr>";
+        const string row = "<w:tr><w:tc><w:p><w:r><w:t>UNO</w:t></w:r></w:p></w:tc>"
+            + "<w:tc><w:p><w:r><w:t>Alumno Uno</w:t></w:r></w:p></w:tc>"
+            + "<w:tc><w:p><w:r><w:t>DOS</w:t></w:r></w:p></w:tc></w:tr>";
+        DocxTestPackage.Create(historicalPath, [header + row], source: true);
+
+        var snapshot = await new DocxHistoricalStudentReader().ReadAsync(
+            historicalPath,
+            "Nombre y Apellidos",
+            CancellationToken.None);
+
+        var fields = Assert.Single(snapshot.Candidates).ReviewFields;
+        Assert.Equal(["Primera", "Segunda"], fields.Select(field => field.Header));
+        Assert.Equal(["UNO", "DOS"], fields.Select(field => field.Text));
+    }
+
+    [Fact]
+    public async Task ReadAsync_CyclicStyle_ThrowsUsefulDocumentStructureException()
+    {
+        using var temporary = new TemporaryDirectory();
+        var historicalPath = temporary.File("historical.docx");
+        DocxTestPackage.Create(
+            historicalPath,
+            [DocxTestPackage.Header + DocxTestPackage.PersonRow("Alumno Uno", "MEDIDA")],
+            source: true);
+        DocxTestPackage.ReplacePart(
+            historicalPath,
+            "word/styles.xml",
+            $"<w:styles xmlns:w=\"{DocxTestPackage.WordNamespace}\">"
+            + "<w:style w:type=\"paragraph\" w:styleId=\"EstiloPersona\"><w:basedOn w:val=\"Circular\"/></w:style>"
+            + "<w:style w:type=\"paragraph\" w:styleId=\"Circular\"><w:basedOn w:val=\"EstiloPersona\"/></w:style>"
+            + "</w:styles>");
+
+        var error = await Assert.ThrowsAsync<DocumentStructureException>(() =>
+            new DocxHistoricalStudentReader().ReadAsync(
+                historicalPath,
+                "Nombre y Apellidos",
+                CancellationToken.None));
+
+        Assert.Contains("ciclo de estilos", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task GenerateAndValidateAsync_FoundAndMissingStudents_PreservesDataWithoutHighlightingMissing()
     {
