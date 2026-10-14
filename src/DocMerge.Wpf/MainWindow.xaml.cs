@@ -13,10 +13,12 @@ namespace DocMerge.Wpf;
 /// <summary>Hosts the desktop workflow and handles presentation-only window behavior.</summary>
 public partial class MainWindow : Window
 {
-    private const double StudentDetailPanelWidth = 440;
+    private const double StudentDetailPanelWidth = 600;
+    private const double PanelOuterSpacing = 10;
+    private const double MinimumStudentsWidth = 600;
     private const double ClassesPanelWidth = 260;
-    private const double SideDetailMinimumWidth = 1040;
-    private const double ThreeColumnMinimumWidth = 1500;
+    private const double SideDetailMinimumWidth = StudentDetailPanelWidth + PanelOuterSpacing + MinimumStudentsWidth;
+    private const double ThreeColumnMinimumWidth = SideDetailMinimumWidth + ClassesPanelWidth;
     private const double ClassListMinimumWidth = 1060;
     private static readonly DependencyProperty DetailExtentProperty = DependencyProperty.Register(
         "DetailExtent", typeof(double), typeof(MainWindow),
@@ -459,6 +461,8 @@ public partial class MainWindow : Window
         }
 
         var width = ReviewWorkspace.ActualWidth;
+        ReviewInputSummary.Visibility = Content is FrameworkElement { ActualHeight: < 650 }
+            ? Visibility.Collapsed : Visibility.Visible;
         var extent = (double)GetValue(DetailExtentProperty);
         var hasDetail = _viewModel.IsStudentDetailOpen || extent > 0;
         var fullDetail = hasDetail && width < SideDetailMinimumWidth;
@@ -468,10 +472,11 @@ public partial class MainWindow : Window
         CompactClassSelector.Visibility = compactClasses ? Visibility.Visible : Visibility.Collapsed;
         StudentsPanel.Visibility = fullDetail ? Visibility.Collapsed : Visibility.Visible;
         StudentsColumn.Width = fullDetail ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        var detailWidth = fullDetail ? width : StudentDetailPanelWidth;
+        var detailWidth = fullDetail ? width : StudentDetailPanelWidth + PanelOuterSpacing;
         StudentDetailColumn.Width = new GridLength(detailWidth * extent);
-        StudentDetailPanel.Width = detailWidth;
-        StudentDetailPanel.HorizontalAlignment = HorizontalAlignment.Left;
+        StudentDetailPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
+        ReviewSourceColumn.Visibility = width - ClassesColumn.Width.Value - (hasDetail ? detailWidth : 0) >= 780
+            ? Visibility.Visible : Visibility.Collapsed;
         BackToStudentListButton.Visibility = fullDetail ? Visibility.Visible : Visibility.Collapsed;
     }
 

@@ -574,7 +574,7 @@ public sealed partial class MainWindowViewModelTests
                 discovery,
                 new StubRosterReader(this, RosterPath, FailRosterRead, UseMixedReview),
                 new StubTemplateReader(TemplatePath, TemplateSupportsHeader),
-                new StubHistoricalReader(HistoricalPath, UseMixedReview, AllStudentsConflict),
+                new StubHistoricalReader(HistoricalPath, UseMixedReview, AllStudentsConflict, IncludeRichMeasures),
                 new ClassGenerationPlanner(new HistoricalStudentResolver()));
             var execution = new ClassGenerationExecutionService(
                 new StubGenerator(),
@@ -597,6 +597,8 @@ public sealed partial class MainWindowViewModelTests
             SelectSourceFolders(viewModel);
             viewModel.SelectDroppedPath(InputKind.Template, TemplatePath);
         }
+
+        internal bool IncludeRichMeasures { get; init; }
 
         internal void SelectSourceFolders(MainWindowViewModel viewModel)
         {
@@ -681,7 +683,8 @@ public sealed partial class MainWindowViewModelTests
         private sealed class StubHistoricalReader(
             string path,
             bool useMixedReview,
-            bool allStudentsConflict) : IHistoricalStudentReader
+            bool allStudentsConflict,
+            bool includeRichMeasures) : IHistoricalStudentReader
         {
             public Task<HistoricalDocumentSnapshot> ReadAsync(
                 string ignored,
@@ -694,7 +697,7 @@ public sealed partial class MainWindowViewModelTests
                         ? [Candidate(path, "ALUMNO, UNO"), Candidate(path + ".copy", "ALUMNO, UNO")]
                         : useMixedReview ? MixedCandidates(path) : []));
 
-            private static HistoricalStudentCandidate[] MixedCandidates(string path) =>
+            private HistoricalStudentCandidate[] MixedCandidates(string path) =>
             [
                 Candidate(path, "ÚNICO, ALUMNO"),
                 Candidate(path, "EQUIVALENTE, ALUMNO"),
@@ -705,7 +708,7 @@ public sealed partial class MainWindowViewModelTests
                 Candidate(path, "OTRO, ÚNICO"),
             ];
 
-            private static HistoricalStudentCandidate Candidate(string documentPath, string name)
+            private HistoricalStudentCandidate Candidate(string documentPath, string name)
             {
                 var matchKey = StudentNameMatchKey.Create(name);
                 var record = new DocumentRecord(
@@ -716,7 +719,19 @@ public sealed partial class MainWindowViewModelTests
                     name,
                     "<row />",
                     new RecordDependencies([], [], []));
-                return new HistoricalStudentCandidate(record, matchKey);
+                if (!includeRichMeasures)
+                {
+                    return new HistoricalStudentCandidate(record, matchKey);
+                }
+
+                var content = new HistoricalRichContent(Enumerable.Range(1, 18).Select(index =>
+                    new HistoricalRichParagraph(
+                        [new HistoricalRichInline(HistoricalRichInlineKind.Text,
+                            $"Medida {index}: facilitar instrucciones claras, materiales accesibles y tiempo suficiente para revisar las actividades. Mantener seguimiento individual y coordinación con la familia.",
+                            new HistoricalTextFormatting(IsBold: index == 1))],
+                        new HistoricalParagraphFormatting(SpaceAfterPoints: 8))).ToArray());
+                return new HistoricalStudentCandidate(record, matchKey,
+                    [new HistoricalInformationField("Medidas", "Medidas extensas", false, content)]);
             }
         }
 

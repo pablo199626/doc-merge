@@ -90,10 +90,10 @@ animaciones.
 
 El detalle de alumno está integrado en la revisión y es independiente de la modal
 reservada a los informes generales de incidencias. Se acopla como una tercera
-columna de 440 DIP al borde derecho y ocupa toda la altura útil. Las tres zonas son
+columna de 610 DIP (panel de 600 DIP más márgenes) al borde derecho y ocupa toda la altura útil. Las tres zonas son
 hijos directos de `ReviewWorkspace`: el detalle no pertenece a `ReviewTableSurface`.
-Con 1500 DIP útiles se muestran clases (260 DIP), tabla (espacio restante) y detalle.
-Por debajo se compactan las clases; con menos de 1040 DIP útiles el detalle pasa a
+Con 1470 DIP útiles se muestran clases (260 DIP), tabla (espacio restante) y detalle.
+Por debajo se compactan las clases; con menos de 1210 DIP útiles el detalle pasa a
 vista principal temporal con «Volver al listado», conservando la instancia de la
 tabla, sus filtros y selección. La transición de 200 ms modifica progresivamente
 el espacio reservado al detalle, recortado por el área de revisión, sin superponerlo
@@ -101,6 +101,16 @@ a la tabla. Cabecera, resultado y navegación inferior permanecen fijos; solo el
 cuerpo tiene scroll. Cambiar de clase, excluir
 mediante filtros al alumno visible o abandonar la revisión cierra y descarta el
 detalle.
+
+Los tres paneles comparten margen exterior de 5 DIP, borde y radio de 12 DIP.
+Las tarjetas de clases distribuyen identidad y badges en dos filas, con medición
+limitada al viewport y scroll exclusivamente vertical. La revisión usa verde para
+Encontrado, azul para Alumno nuevo y rojo para Conflicto, reutilizando los recursos
+semánticos; los avisos independientes conservan sus colores. El cuerpo del detalle
+reserva espacio lateral para la scrollbar de WPF-UI, separado de la navegación fija.
+En alturas útiles reducidas se oculta el resumen superior de entradas para dejar
+espacio legible al cuerpo. La procedencia de la tabla se oculta cuando no cabe;
+nombre, NIA y estado se conservan y la procedencia sigue disponible en el detalle.
 
 La cabecera fija presenta identidad, clase, NIA, estado, posición dentro de los
 resultados visibles y navegación anterior/siguiente. La navegación sigue
@@ -432,7 +442,7 @@ manual exhaustiva del panel en temas, anchuras y DPI indicados, así como Narrad
 animaciones desactivadas.
 
 La corrección posterior de la jerarquía XAML añade una prueba STA de ventana real:
-comprueba padres, límites, ancho de 440 DIP, ausencia de solapamiento, cambio de
+comprueba padres, límites, ancho del panel, ausencia de solapamiento, cambio de
 alumno, transiciones interrumpidas y recuperación del ancho al cerrar. Se revisaron
 capturas con datos ficticios a 1920×1080 y 1366×768, claro/oscuro, modo estrecho y
 escalado de layout al 150 %. Este último no sustituye pruebas con DPI nativo de
