@@ -14,7 +14,7 @@ namespace DocMerge.Wpf.ViewModels;
 public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private const string StudentHeader = "Nombre y Apellidos";
-    private const string BundledTemplateDisplayName = "Plantilla estándar de Talos";
+    private const string BundledTemplateDisplayName = "Plantilla predeterminada";
     private const double CompactSidebarWidth = 64;
     private const double ExpandedSidebarWidth = 220;
     private const double SidebarOverlayThreshold = 900;
