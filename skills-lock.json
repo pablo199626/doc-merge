@@ -11,21 +11,6 @@
       "sourceType": "autoskills-registry",
       "computedHash": "03ba5f2f605625202803d1cc79353e10b4f3ff720b93992aeecc8d88a1e44720"
     },
-    "csharp-mstest": {
-      "source": "github/awesome-copilot",
-      "sourceType": "autoskills-registry",
-      "computedHash": "abb51cb248cb42f92716dc6568da8c33a9ea23af9a34155ef3ba156a61d9693d"
-    },
-    "csharp-nunit": {
-      "source": "github/awesome-copilot",
-      "sourceType": "autoskills-registry",
-      "computedHash": "0493f7b95a519b13685335a32c9ff86e4eaca53e44a4f6795d11f72f899c683d"
-    },
-    "csharp-tunit": {
-      "source": "github/awesome-copilot",
-      "sourceType": "autoskills-registry",
-      "computedHash": "5c6139f8cf75687df89a7c8c8fe8834676ffb496b632433973c84e128b52c2f6"
-    },
     "csharp-xunit": {
       "source": "github/awesome-copilot",
       "sourceType": "autoskills-registry",
