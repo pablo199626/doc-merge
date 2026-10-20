@@ -30,6 +30,7 @@ Haz doble clic en DocMerge.exe. Se abrirá un asistente donde podrás:
 
   1. Transferir personas usando un listado PDF.
   2. Ordenar alfabéticamente un documento Word.
+  3. Generar los documentos Word de las clases desde carpetas de históricos y PDF.
 
 Puedes escribir las rutas o arrastrar cada archivo a la ventana. La ventana
 permanecerá abierta al finalizar para que puedas revisar el resultado.
@@ -49,3 +50,20 @@ Revisar las acciones sin crear un documento:
 
 Al terminar se muestra un resumen y cualquier caso que requiera revisión
 manual por ausencia o ambigüedad de nombres.
+
+GENERAR LOS DOCUMENTOS DE LAS CLASES
+====================================
+
+Haz doble clic en DocMerge.exe y elige la opción 3. El asistente solicitará:
+
+  - La carpeta con los documentos Word históricos.
+  - La carpeta con los listados PDF de las nuevas clases.
+  - La plantilla Word vacía.
+  - Una carpeta nueva para publicar los documentos generados.
+
+También se puede ejecutar desde la línea de comandos:
+
+  DocMerge.exe --generar-clases --historicos "C:\ruta\historicos" --listas "C:\ruta\pdf" --plantilla "C:\ruta\plantilla.docx" --salida "C:\ruta\resultado"
+
+La carpeta de salida no debe existir previamente. Añade --simular para revisar
+el plan y los avisos sin crear documentos.

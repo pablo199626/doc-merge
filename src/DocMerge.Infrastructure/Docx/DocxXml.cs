@@ -11,7 +11,43 @@ internal static class DocxXml
     internal static XDocument Parse(byte[] content)
     {
         using var stream = new MemoryStream(content, writable: false);
-        return XDocument.Load(stream, LoadOptions.PreserveWhitespace);
+        var document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
+        ValidateCompatibilityPrefixes(document);
+        return document;
+    }
+
+    private static void ValidateCompatibilityPrefixes(XDocument document)
+    {
+        var attributes = document.Descendants()
+            .Attributes()
+            .Where(attribute => attribute.Name.Namespace == DocxNames.MarkupCompatibility);
+        foreach (var attribute in attributes)
+        {
+            foreach (var prefix in ReadCompatibilityPrefixes(attribute))
+            {
+                if (attribute.Parent?.GetNamespaceOfPrefix(prefix) is null)
+                {
+                    throw new DocumentStructureException(
+                        $"El documento declara el prefijo de compatibilidad '{prefix}' sin definir su espacio de nombres XML.");
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> ReadCompatibilityPrefixes(XAttribute attribute)
+    {
+        var usesQualifiedNames = attribute.Name.LocalName is
+            "PreserveElements" or "PreserveAttributes" or "ProcessContent";
+        foreach (var token in attribute.Value.Split(
+            (char[]?)null,
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var separator = token.IndexOf(':');
+            if (!usesQualifiedNames || separator > 0)
+            {
+                yield return separator > 0 ? token[..separator] : token;
+            }
+        }
     }
 
     internal static byte[] Serialize(XDocument document)

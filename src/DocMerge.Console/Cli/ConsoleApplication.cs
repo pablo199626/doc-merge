@@ -1,5 +1,6 @@
 using DocMerge.Application.Documents;
 using DocMerge.Application.Errors;
+using DocMerge.Application.Generation;
 using DocMerge.Application.Sorting;
 using DocMerge.Application.Transfer;
 using DocMerge.Console.Interactive;
@@ -19,19 +20,25 @@ public sealed class ConsoleApplication
     private readonly InteractiveWizard _wizard;
     private readonly SortDocumentService _sortService;
     private readonly TransferService _transferService;
+    private readonly ClassGenerationService? _classGenerationService;
+    private readonly ClassGenerationExecutionService? _classGenerationExecutionService;
 
     public ConsoleApplication(
         CliParser parser,
         IConsoleIO console,
         InteractiveWizard wizard,
         SortDocumentService sortService,
-        TransferService transferService)
+        TransferService transferService,
+        ClassGenerationService? classGenerationService = null,
+        ClassGenerationExecutionService? classGenerationExecutionService = null)
     {
         _parser = parser ?? throw new ArgumentNullException(nameof(parser));
         _console = console ?? throw new ArgumentNullException(nameof(console));
         _wizard = wizard ?? throw new ArgumentNullException(nameof(wizard));
         _sortService = sortService ?? throw new ArgumentNullException(nameof(sortService));
         _transferService = transferService ?? throw new ArgumentNullException(nameof(transferService));
+        _classGenerationService = classGenerationService;
+        _classGenerationExecutionService = classGenerationExecutionService;
     }
 
     public async Task<int> RunAsync(
@@ -105,6 +112,12 @@ public sealed class ConsoleApplication
         ExecutionContext context,
         CancellationToken cancellationToken)
     {
+        if (context.GenerationRequest is not null)
+        {
+            await ExecuteClassGenerationAsync(context, cancellationToken);
+            return;
+        }
+
         if (!ConfirmOverwrite(context))
         {
             _console.WriteLine("Operación cancelada.");
@@ -125,6 +138,37 @@ public sealed class ConsoleApplication
         var count = await _sortService.ExecuteAsync(request, cancellationToken);
         _console.WriteLine($"Documento creado: {context.OutputPath}");
         _console.WriteLine($"Filas ordenadas: {count}");
+    }
+
+    private async Task ExecuteClassGenerationAsync(
+        ExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        if (_classGenerationService is null || _classGenerationExecutionService is null)
+        {
+            throw new InvalidOperationException(
+                "Los servicios de generación de clases no están configurados.");
+        }
+
+        var prepared = await _classGenerationService.PrepareAsync(
+            context.GenerationRequest!, cancellationToken);
+        if (context.Options.Simulate)
+        {
+            _console.WriteLine(ClassGenerationPlanFormatter.Format(prepared.Plan, simulation: true));
+            return;
+        }
+
+        var profile = SortingProfiles.Get(context.Options.SortRule);
+        var result = await _classGenerationExecutionService.ExecuteAsync(
+            new ClassGenerationExecutionRequest(prepared, context.OutputPath, profile),
+            cancellationToken);
+        _console.WriteLine($"Lote creado: {result.OutputDirectory}");
+        foreach (var document in result.Documents)
+        {
+            _console.WriteLine($"Documento creado: {document.Path}");
+        }
+
+        _console.WriteLine(ClassGenerationPlanFormatter.Format(result.Plan, simulation: false));
     }
 
     private async Task ExecuteTransferAsync(

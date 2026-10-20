@@ -9,6 +9,8 @@ public static class SortingProfiles
     public const string DefaultIdentifier = "apellido-nombre-segundo-apellido";
     /// <summary>The identifier of the given-name-first profile.</summary>
     public const string GivenNameFirstIdentifier = "nombre-apellidos";
+    /// <summary>The identifier of the comma-separated surname-first profile.</summary>
+    public const string CommaSeparatedIdentifier = "apellidos-coma-nombre";
 
     private static readonly INameInterpreter LegacyInterpreter = new LegacyNameInterpreter();
 
@@ -18,6 +20,8 @@ public static class SortingProfiles
             new SortKey(parts.FirstSurname, parts.GivenName, parts.SecondSurname)),
         new(GivenNameFirstIdentifier, LegacyInterpreter, parts =>
             new SortKey(parts.GivenName, parts.FirstSurname, parts.SecondSurname)),
+        new(CommaSeparatedIdentifier, new CommaSeparatedNameInterpreter(), parts =>
+            new SortKey(parts.FirstSurname, parts.SecondSurname, parts.GivenName)),
     ];
 
     private static readonly FrozenDictionary<string, SortingProfile> Profiles =

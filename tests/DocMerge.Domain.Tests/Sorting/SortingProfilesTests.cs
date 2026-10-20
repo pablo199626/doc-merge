@@ -48,4 +48,16 @@ public sealed class SortingProfilesTests
 
         Assert.True(SortKeyComparer.Instance.Compare(basic, supplementary) < 0);
     }
+
+    [Fact]
+    public void CreateKey_CommaSeparatedProfile_OrdersBySurnamesThenGivenName()
+    {
+        var profile = SortingProfiles.Get(SortingProfiles.CommaSeparatedIdentifier);
+
+        var key = profile.CreateKey("GARCÍA LÓPEZ, MARÍA JOSÉ");
+
+        Assert.Equal("garcía", key.First);
+        Assert.Equal("lópez", key.Second);
+        Assert.Equal("maría josé", key.Third);
+    }
 }

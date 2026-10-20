@@ -248,3 +248,23 @@ histórica. La nueva entrega es `release/DocMerge.exe`, con SHA-256
    cubiertos por el `.gitignore` actual.
 
 Estos puntos se corrigen o aíslan en tareas posteriores; T00 solo los registra.
+
+## Entrega posterior: generación de clases
+
+La certificación histórica anterior permanece como referencia de migración. El
+11 de octubre de 2026 se añadió un caso de uso exclusivamente C# para generar
+documentos de clases desde históricos, PDF de grupos y una plantilla. No existe
+un módulo Python equivalente y no debe incorporarse a `legacy/python/`.
+
+La entrega posterior conserva la versión de producto `2.1.0` y fue publicada y
+probada en `--version`, simulación, generación real y asistente sin argumentos:
+
+```text
+Ruta: release/DocMerge.exe
+Versión de archivo: 2.1.0.0
+Versión de producto: 2.1.0
+Tamaño: 79.810.864 bytes
+SHA-256: 61b42c2d63b791f631d0e6b4e13186a54cde865c9e36e38b862f754df9fcc2d5
+```
+
+Los contratos de la funcionalidad nueva están en `docs/class-generation.md`.

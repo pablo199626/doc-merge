@@ -3,12 +3,29 @@
 | Término externo o Python | Identificador C# |
 | --- | --- |
 | alumnado | `Student` / `PdfEntry`, según el contexto |
+| alumno histórico | `HistoricalStudentCandidate` |
 | cabecera | `Header` |
+| clase o grupo | `ClassIdentifier` / `ClassRoster` |
 | correspondencia | `Match` / `TransferPlan` |
 | destino | `Destination` |
 | incidencia | `TransferIssue` |
+| incidencia de generación | `GenerationIssue` |
+| referencia de incidencia | `GenerationIssueReference` |
+| índice histórico | `HistoricalStudentIndex` |
 | listado | `PdfList` |
+| listado de clase | `ClassRoster` |
 | nombre y apellidos | `FullName` |
+| clave tolerante de nombre | `StudentNameMatchKey` / `MatchKey` |
 | ordenación | `Sorting` |
 | origen | `Source` |
 | transferencia | `Transfer` |
+| generación de clases | `ClassGeneration` |
+| plantilla | `GenerationTemplateSnapshot` |
+| plantilla incluida | `BundledGenerationTemplate` |
+| cabecera visible del documento | `ClassHeaderValues` |
+| opciones editables de salida | `ClassGenerationOutputOptions` |
+| lote preparado o revisión | `PreparedClassGeneration` |
+| carpeta nueva de salida | `OutputDirectory` |
+| encontrado | `HistoricalResolutionType.Found` |
+| alumno nuevo | `HistoricalResolutionType.NewStudent` |
+| conflicto de alumno | `HistoricalResolutionType.Conflict` |
