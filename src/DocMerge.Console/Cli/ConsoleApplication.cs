@@ -147,7 +147,7 @@ public sealed class ConsoleApplication
         if (_classGenerationService is null || _classGenerationExecutionService is null)
         {
             throw new InvalidOperationException(
-                "Los servicios de generación de clases no están configurados.");
+                "Los servicios de generación de anexos no están configurados.");
         }
 
         var prepared = await _classGenerationService.PrepareAsync(

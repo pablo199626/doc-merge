@@ -52,7 +52,7 @@ public sealed class BundledGenerationTemplateProvider : IBundledGenerationTempla
                 1,
                 "academic-measures-three-column",
                 TemplateHeaderContract.Version,
-                "Plantilla estándar de DocMerge",
+                "Plantilla estándar de Talos",
                 ExpectedSha256,
                 path);
             return _template;
@@ -85,7 +85,7 @@ public sealed class BundledGenerationTemplateProvider : IBundledGenerationTempla
         await using var stream = Assembly.GetExecutingAssembly()
             .GetManifestResourceStream(ResourceName)
             ?? throw new OperationValidationException(
-                "No se encontró la plantilla estándar incluida con DocMerge.");
+                "No se encontró la plantilla predeterminada.");
         using var buffer = new MemoryStream();
         await stream.CopyToAsync(buffer, cancellationToken);
         return buffer.ToArray();
@@ -97,7 +97,7 @@ public sealed class BundledGenerationTemplateProvider : IBundledGenerationTempla
         if (!string.Equals(actual, ExpectedSha256, StringComparison.Ordinal))
         {
             throw new OperationValidationException(
-                "La plantilla estándar incluida no supera la comprobación de integridad.");
+                "La plantilla predeterminada no supera la comprobación de integridad.");
         }
     }
 

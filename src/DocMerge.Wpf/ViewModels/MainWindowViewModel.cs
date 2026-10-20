@@ -577,7 +577,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     /// <summary>Gets selection guidance consistent with the active template source.</summary>
     public string SelectionIntroduction => TemplateInput.IsBundled
-        ? "Selecciona las carpetas de históricos y listados PDF. La plantilla estándar ya está incluida."
+        ? "Selecciona las carpetas de históricos y listados PDF. La plantilla predeterminada ya está incluida."
         : "Selecciona las carpetas de históricos y listados PDF. Se utilizará la plantilla externa elegida.";
 
     /// <summary>Gets or sets the existing parent folder for output.</summary>
@@ -934,7 +934,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             if (TemplateInput.IsBundled && !prepared.Template.SupportsDocumentHeader)
             {
                 TemplateInput.SetError(
-                    "La plantilla estándar incluida no contiene los campos de clase y tutor requeridos.");
+                    "La plantilla predeterminada no contiene los campos de clase y tutor requeridos.");
                 GeneralError = "La plantilla incluida es incompatible. No se ha creado un plan de revisión.";
                 completionState = DesktopWorkflowState.AnalysisFailed;
                 return;

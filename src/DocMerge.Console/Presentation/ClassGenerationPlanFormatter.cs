@@ -8,7 +8,7 @@ public static class ClassGenerationPlanFormatter
     {
         var lines = new List<string>
         {
-            simulation ? "Simulación de generación de clases:" : "Resumen de generación de clases:",
+            simulation ? "Simulación de generación de anexos:" : "Resumen de generación de anexos:",
         };
         foreach (var classPlan in plan.Classes)
         {

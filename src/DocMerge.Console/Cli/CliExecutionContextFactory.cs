@@ -48,7 +48,7 @@ internal static class CliExecutionContextFactory
         if (options.Force)
         {
             throw new CliUsageException(
-                "la generación de clases publica siempre en una carpeta nueva; no admite --force");
+                "la generación de anexos publica siempre en una carpeta nueva; no admite --force");
         }
 
         RequireExistingDirectory(options.HistoricalDirectory, "la carpeta de históricos no existe");
