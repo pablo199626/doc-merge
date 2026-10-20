@@ -7,9 +7,9 @@
         xmlns:services="clr-namespace:DocMerge.Wpf.Services"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:vm="clr-namespace:DocMerge.Wpf.ViewModels"
-        Title="Talos — Generación de clases"
+        Title="Talos — Generación de anexos"
         Icon="Resources/Brand/Talos.ico"
-        Width="1366" Height="820" MinWidth="720" MinHeight="560"
+        Width="1760" Height="1120" MinWidth="720" MinHeight="560"
         WindowStartupLocation="CenterScreen"
         Loaded="MainWindow_Loaded"
         SizeChanged="MainWindow_SizeChanged"
@@ -885,20 +885,6 @@
                                                     <DataTemplate>
                                                         <TextBlock Text="{Binding Source}" Style="{StaticResource DataGridTextElement}"
                                                                    ToolTip="{Binding Source}" />
-                                                    </DataTemplate>
-                                                </DataGridTemplateColumn.CellTemplate>
-                                            </DataGridTemplateColumn>
-                                            <DataGridTemplateColumn x:Name="ReviewDetailColumn" Header="Detalle" Width="100">
-                                                <DataGridTemplateColumn.CellTemplate>
-                                                    <DataTemplate>
-                                                        <Button Style="{StaticResource InlineDetailButton}"
-                                                                ToolTip="Abrir el detalle de este alumno"
-                                                                automation:AutomationProperties.Name="Abrir detalle del alumno"
-                                                                Click="ReviewDetailButton_Click"
-                                                                CommandParameter="{Binding}">
-                                                            <TextBlock Text="Ver detalle" TextWrapping="NoWrap"
-                                                                       Foreground="{DynamicResource AccentBrush}" />
-                                                        </Button>
                                                     </DataTemplate>
                                                 </DataGridTemplateColumn.CellTemplate>
                                             </DataGridTemplateColumn>

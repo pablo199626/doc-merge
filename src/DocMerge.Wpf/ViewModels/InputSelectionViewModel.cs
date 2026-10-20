@@ -201,7 +201,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         Status = count.HasValue
             ? $"Analizada · {count.Value} {(count.Value == 1 ? "documento" : "documentos")}"
             : IsBundled
-                ? "Incluida con Talos · analizada"
+                ? "Plantilla predeterminada · analizada"
                 : "Plantilla externa · analizada";
         State = InputSelectionState.Validated;
     }
@@ -220,7 +220,7 @@ public sealed class InputSelectionViewModel : ViewModelBase
         }
 
         Status = IsBundled
-            ? "Incluida con Talos · pendiente de analizar"
+            ? "Plantilla predeterminada · pendiente de analizar"
             : "Seleccionado · pendiente de analizar";
         State = InputSelectionState.Selected;
     }

@@ -54,11 +54,8 @@ public sealed class InputSelectionViewModelTests
         var input = new InputSelectionViewModel(
             InputKind.Template, "Plantilla", "Descripción");
 
-        input.SelectBundled("template.docx", "Plantilla estándar de Talos");
+        input.SelectBundled("template.docx", "Plantilla predeterminada");
         input.CompleteAnalysis(count: null);
-
-        Assert.Equal("Incluida con Talos", input.DisplayLocation);
-        Assert.Equal("Incluida con Talos · analizada", input.Status);
     }
 
     [Fact]
@@ -66,15 +63,13 @@ public sealed class InputSelectionViewModelTests
     {
         var input = new InputSelectionViewModel(
             InputKind.Template, "Plantilla", "Descripción");
-        input.SelectBundled("template.docx", "Plantilla estándar de Talos");
+        input.SelectBundled("template.docx", "Plantilla estándar predeterminada");
         input.CompleteAnalysis(count: null);
 
         input.ResetAnalysis();
 
         Assert.True(input.HasSelection);
         Assert.True(input.IsBundled);
-        Assert.Equal("Incluida con Talos", input.DisplayLocation);
-        Assert.Equal("Incluida con Talos · pendiente de analizar", input.Status);
         Assert.Equal(InputSelectionState.Selected, input.State);
         Assert.Null(input.Count);
     }

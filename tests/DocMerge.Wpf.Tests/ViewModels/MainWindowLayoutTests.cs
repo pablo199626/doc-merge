@@ -123,12 +123,22 @@ public sealed partial class MainWindowViewModelTests
         var workspace = (Grid)window.FindName("ReviewWorkspace");
         var students = (Border)window.FindName("StudentsPanel");
         var detail = (Border)window.FindName("StudentDetailPanel");
+        var reviewGrid = (DataGrid)window.FindName("ReviewGrid");
+        Assert.Equal(["#", "Nombre y apellidos", "NIA", "Estado", "Procedencia"],
+            reviewGrid.Columns.Select(column => column.Header?.ToString()));
         var closedWidth = students.ActualWidth;
         viewModel.OpenStudentDetailCommand.Execute(viewModel.VisibleStudents[0]);
         viewModel.StudentDetail.Close();
         viewModel.OpenStudentDetailCommand.Execute(viewModel.VisibleStudents[0]);
-        await Task.Delay(80);
+        await Task.Delay(150);
         window.UpdateLayout();
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            var openingWidth = workspace.ColumnDefinitions[2].ActualWidth;
+            var finalWidth = workspace.ActualWidth < 1610 ? workspace.ActualWidth : 1010;
+            Assert.InRange(openingWidth, 0, finalWidth - 0.1);
+            Assert.True(students.IsVisible);
+        }
         CaptureLayout(window, captureName + "-transition");
         await SettleLayoutAsync(window);
 
@@ -136,10 +146,11 @@ public sealed partial class MainWindowViewModelTests
         Assert.Same(workspace, students.Parent);
         Assert.Equal(2, Grid.GetColumn(detail));
         Assert.Equal(1, Grid.GetColumnSpan(detail));
-        if (workspace.ActualWidth < 1210)
+        if (workspace.ActualWidth < 1610)
         {
             Assert.False(students.IsVisible);
             Assert.True(((Button)window.FindName("BackToStudentListButton")).IsVisible);
+            Assert.InRange(detail.ActualWidth, workspace.ActualWidth - 11, workspace.ActualWidth - 9);
             VerifyDetailScroll(window);
             CaptureLayout(window, captureName);
             await CloseVisibleDetailAsync(window, viewModel);
@@ -147,7 +158,7 @@ public sealed partial class MainWindowViewModelTests
             return;
         }
 
-        Assert.InRange(detail.ActualWidth, 599, 601);
+        Assert.InRange(detail.ActualWidth, 999, 1001);
         Assert.True(students.IsVisible);
         Assert.True(students.ActualWidth < closedWidth);
         var detailOrigin = detail.TranslatePoint(new Point(), workspace);
@@ -286,6 +297,13 @@ public sealed partial class MainWindowViewModelTests
         var peer = new ButtonAutomationPeer(close);
         var invoker = Assert.IsAssignableFrom<IInvokeProvider>(peer.GetPattern(PatternInterface.Invoke));
         invoker.Invoke();
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            await Task.Delay(150);
+            window.UpdateLayout();
+            var workspace = (Grid)window.FindName("ReviewWorkspace");
+            Assert.InRange(workspace.ColumnDefinitions[2].ActualWidth, 0, workspace.ActualWidth);
+        }
         await SettleLayoutAsync(window);
 
         Assert.False(viewModel.IsStudentDetailOpen);
@@ -331,7 +349,7 @@ public sealed partial class MainWindowViewModelTests
 
     private static async Task SettleLayoutAsync(Window window)
     {
-        await Task.Delay(300);
+        await Task.Delay(500);
         window.UpdateLayout();
     }
 

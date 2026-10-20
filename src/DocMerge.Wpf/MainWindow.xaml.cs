@@ -13,7 +13,7 @@ namespace DocMerge.Wpf;
 /// <summary>Hosts the desktop workflow and handles presentation-only window behavior.</summary>
 public partial class MainWindow : Window
 {
-    private const double StudentDetailPanelWidth = 600;
+    private const double StudentDetailPanelWidth = 1000;
     private const double PanelOuterSpacing = 10;
     private const double MinimumStudentsWidth = 600;
     private const double ClassesPanelWidth = 260;
@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     private double _columnFromWidth;
     private double _columnToWidth;
     private static readonly TimeSpan SidebarAnimationDuration = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan StudentDetailAnimationDuration = TimeSpan.FromMilliseconds(420);
 
     /// <summary>Initializes the main window.</summary>
     public MainWindow(MainWindowViewModel viewModel)
@@ -190,9 +191,6 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainWindowViewModel.IsStudentDetailOpen))
         {
-            ReviewDetailColumn.Visibility = _viewModel.IsStudentDetailOpen
-                ? Visibility.Collapsed
-                : Visibility.Visible;
             if (!_viewModel.IsStudentDetailOpen
                 && Keyboard.FocusedElement is FrameworkElement focused
                 && focused is TextBox or ComboBox)
@@ -381,18 +379,6 @@ public partial class MainWindow : Window
         _viewModel.OpenStudentDetailCommand.Execute(student);
     }
 
-    private void ReviewDetailButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { DataContext: StudentReviewViewModel student } button)
-        {
-            return;
-        }
-
-        _detailFocusTarget = button;
-        _viewModel.OpenStudentDetailCommand.Execute(student);
-        e.Handled = true;
-    }
-
     private void OpenStudentDetailPanel()
     {
         if (!_viewModel.IsStudentDetailOpen)
@@ -425,20 +411,30 @@ public partial class MainWindow : Window
     {
         var sequence = ++_studentDetailAnimationSequence;
         var current = (double)GetValue(DetailExtentProperty);
+        SetValue(DetailExtentProperty, current);
         BeginAnimation(DetailExtentProperty, null);
-        SetValue(DetailExtentProperty, target);
         if (!SystemParameters.ClientAreaAnimation)
         {
+            SetValue(DetailExtentProperty, target);
             CompleteStudentDetailClose(sequence);
             return;
         }
 
-        var animation = new DoubleAnimation(current, target, TimeSpan.FromMilliseconds(200))
+        var animation = new DoubleAnimation(current, target, StudentDetailAnimationDuration)
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
-            FillBehavior = FillBehavior.Stop,
         };
-        animation.Completed += (_, _) => CompleteStudentDetailClose(sequence);
+        animation.Completed += (_, _) =>
+        {
+            if (sequence != _studentDetailAnimationSequence)
+            {
+                return;
+            }
+
+            SetValue(DetailExtentProperty, target);
+            BeginAnimation(DetailExtentProperty, null);
+            CompleteStudentDetailClose(sequence);
+        };
         BeginAnimation(DetailExtentProperty, animation);
     }
 
@@ -473,15 +469,19 @@ public partial class MainWindow : Window
         var hasDetail = _viewModel.IsStudentDetailOpen || extent > 0;
         var fullDetail = hasDetail && width < SideDetailMinimumWidth;
         var compactClasses = width < (hasDetail ? ThreeColumnMinimumWidth : ClassListMinimumWidth);
-        ClassesColumn.Width = new GridLength(compactClasses ? 0 : ClassesPanelWidth);
-        ClassListPanel.Visibility = compactClasses ? Visibility.Collapsed : Visibility.Visible;
-        CompactClassSelector.Visibility = compactClasses ? Visibility.Visible : Visibility.Collapsed;
-        StudentsPanel.Visibility = fullDetail ? Visibility.Collapsed : Visibility.Visible;
-        StudentsColumn.Width = fullDetail ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        var classesWidth = compactClasses
+            ? (width < ClassListMinimumWidth ? 0 : ClassesPanelWidth * (1 - extent))
+            : ClassesPanelWidth;
+        ClassesColumn.Width = new GridLength(classesWidth);
+        ClassListPanel.Visibility = classesWidth > 0 ? Visibility.Visible : Visibility.Collapsed;
+        CompactClassSelector.Visibility = classesWidth == 0 ? Visibility.Visible : Visibility.Collapsed;
+        StudentsPanel.Visibility = fullDetail && extent >= 1 ? Visibility.Collapsed : Visibility.Visible;
+        StudentsColumn.Width = fullDetail && extent >= 1
+            ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         var detailWidth = fullDetail ? width : StudentDetailPanelWidth + PanelOuterSpacing;
         StudentDetailColumn.Width = new GridLength(detailWidth * extent);
         StudentDetailPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
-        ReviewSourceColumn.Visibility = width - ClassesColumn.Width.Value - (hasDetail ? detailWidth : 0) >= 780
+        ReviewSourceColumn.Visibility = width - classesWidth - detailWidth * extent >= 780
             ? Visibility.Visible : Visibility.Collapsed;
         BackToStudentListButton.Visibility = fullDetail ? Visibility.Visible : Visibility.Collapsed;
         CloseStudentDetailButton.Visibility = fullDetail ? Visibility.Collapsed : Visibility.Visible;

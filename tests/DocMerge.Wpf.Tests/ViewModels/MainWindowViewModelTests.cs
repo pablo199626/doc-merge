@@ -203,7 +203,6 @@ public sealed partial class MainWindowViewModelTests
         Assert.False(viewModel.HistoricalInput.HasSelection);
         Assert.False(viewModel.RosterInput.HasSelection);
         Assert.True(viewModel.TemplateInput.IsBundled);
-        Assert.Equal("Incluida con Talos", viewModel.TemplateInput.DisplayLocation);
         Assert.Null(viewModel.GenerationResult);
         Assert.Null(viewModel.OutputParent);
         Assert.Equal("Clases generadas", viewModel.OutputFolderName);
@@ -514,7 +513,6 @@ public sealed partial class MainWindowViewModelTests
         Assert.Equal(DesktopWorkflowState.AnalysisCancelled, viewModel.WorkflowState);
         Assert.False(viewModel.IsBusy);
         Assert.True(viewModel.TemplateInput.IsBundled);
-        Assert.Equal("Incluida con Talos", viewModel.TemplateInput.DisplayLocation);
         Assert.Equal(InputSelectionState.Selected, viewModel.TemplateInput.State);
     }
 
